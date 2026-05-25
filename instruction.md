@@ -1,71 +1,63 @@
-# Webhook Delivery Queue — Replay Broken After Deploy
+# WAL Replay Engine — Debugging Task
 
-## What happened
+## Overview
+A write-ahead log replay engine processes WAL segments from a database crash recovery scenario. It identifies committed transactions, reconstructs page state by replaying writes, and produces a recovery report.
 
-We run a webhook delivery service that retries failed HTTP callbacks with exponential backoff. We built a log replayer that processes delivery logs and produces a summary report of the queue state — how many delivered, how many dead-lettered, latency stats, etc.
+## System Environment
+- **Language**: Python 3.11
+- **Runtime**: `/app/runtime/` (source modules, configuration, WAL segments, output)
+- **Global system-wide tooling**: `uv` and `pytest` are available
+- **No external packages required** — stdlib only
 
-Last Thursday someone pushed a "cleanup" that broke the reporting. The queue state tracking and the report generation are both producing wrong numbers now. We've been getting paged about incorrect SLA metrics and need this fixed ASAP.
+## Key Files
+| File | Purpose |
+|------|---------|
+| `/app/runtime/run_recovery.py` | Entry point (correct) |
+| `/app/runtime/wal_loader.py` | Loads WAL segment JSONL files (correct) |
+| `/app/runtime/txn_tracker.py` | Tracks transaction states and committed set |
+| `/app/runtime/page_reconstructor.py` | Reconstructs page state from write records |
+| `/app/runtime/checkpoint_handler.py` | Determines replay boundary from checkpoint |
+| `/app/runtime/recovery_writer.py` | Writes output JSON files (correct) |
+| `/app/runtime/recovery.ini` | Recovery configuration parameters |
 
-## How it works
+## What's Wrong
 
-Four Python files in `/app/runtime/`:
+The engine runs without errors but produces incorrect recovery output:
 
-- `replay_engine.py` — entry point, wires the pipeline together (this file is fine)
-- `log_parser.py` — reads `delivery_logs.txt`, turns lines into event dicts (this file is fine)
-- `queue_state.py` — processes events and maintains per-webhook delivery state
-- `report_generator.py` — computes metrics and writes output files
+- **Page contents are wrong** — some pages show stale data that doesn't match what the committed transactions wrote. The final state of several pages doesn't reflect the most recent committed write.
 
-The input log (`delivery_logs.txt`) records 8 webhooks going through their delivery lifecycle: enqueue, attempt, success/failure, retry scheduling, and dead-letter routing. The log is correct — don't modify it.
+- **Wrong transactions included in replay** — the recovery seems to be replaying writes from transactions that should not be part of the recovery set. Some aborted transaction data appears in the recovered state.
 
-## What's broken
+- **Recovery boundary is off** — writes that should already be durable (from before the last checkpoint) are being unnecessarily re-applied, and the reported recovery LSN range seems incorrect.
 
-Several metrics in the output are wrong:
+## Output Schema
 
-- **Attempt counting is inflated** — total_attempts shows way more than the actual delivery attempts in the log. Something is counting events that aren't real delivery attempts.
+### `/app/runtime/output/recovered_state.json`
+| Field | Type | Description |
+|-------|------|-------------|
+| `pages` | object | Map of page_id to recovered page content |
+| `pages.<page_id>` | string | Final recovered value for this page |
+| `committed_txns` | array | List of transaction IDs that were committed |
+| `replayed_writes` | int | Number of write operations replayed |
+| `recovery_lsn_start` | int | First LSN in the replay window |
+| `recovery_lsn_end` | int | Last LSN replayed |
+| `state_digest` | string | 16-char hex integrity hash |
 
-- **Delivery rate is wrong** — the rate should reflect what fraction of webhooks eventually got delivered successfully (a queue-level metric), but it's showing something much lower that looks like a per-attempt probability.
+### `/app/runtime/output/recovery_report.json`
+| Field | Type | Description |
+|-------|------|-------------|
+| `total_records_processed` | int | Total WAL records read |
+| `transactions` | object | Per-transaction outcome |
+| `transactions.<txn_id>.status` | string | "committed", "aborted", or "in_progress" |
+| `transactions.<txn_id>.write_count` | int | Number of writes by this transaction |
+| `checkpoint_lsn` | int | LSN of the last checkpoint |
+| `pages_recovered` | int | Number of distinct pages reconstructed |
+| `high_conflict_pages` | array | Pages written by multiple transactions |
 
-- **Mean latency is too high** — mean_latency_ms should only reflect the response time of webhooks that actually made it through. Instead it seems to be averaging in the durations of failed deliveries from endpoints that never came back online.
+## Your Task
+Identify and fix the defects in the recovery logic. The entry point, WAL loader, recovery writer, configuration file, and WAL segment files are all correct and should not be modified.
 
-- **Fingerprint is unstable** — the queue_fingerprint changes between runs. The hash computation depends on data that's wrong due to the other bugs, plus the iteration order may not be deterministic.
-
-## Output file format
-
-The replayer produces two files in `/app/runtime/`:
-
-**`webhook_status.jsonl`** — one JSON record per line (sorted by webhook_id), each with:
-- `webhook_id` (string): webhook identifier
-- `endpoint` (string): target URL
-- `event` (string): event type that triggered this webhook
-- `status` (string): "delivered", "dead_letter", or "pending"
-- `attempts` (int): number of delivery attempts made
-- `max_retries` (int): configured retry limit
-- `delivered_at` (int or null): timestamp of successful delivery
-- `failure_reasons` (array of strings): reasons for each failed attempt
-- `total_duration_ms` (int): cumulative HTTP response time across all attempts
-
-**`delivery_report.json`** — summary statistics:
-- `total_webhooks` (int): number of webhooks processed
-- `delivered` (int): webhooks that succeeded
-- `dead_lettered` (int): webhooks that exhausted retries
-- `pending` (int): webhooks still awaiting delivery
-- `delivery_rate` (float): fraction of webhooks delivered successfully
-- `mean_latency_ms` (int): average response time for delivered webhooks
-- `total_attempts` (int): total delivery attempts made
-- `queue_fingerprint` (string): 16-char hex hash for integrity verification
-
-## How to run
-
+After fixing, re-run:
 ```bash
-python3 /app/runtime/replay_engine.py
+python3 -m runtime.run_recovery
 ```
-
-This regenerates `webhook_status.jsonl` and `delivery_report.json` in `/app/runtime/`.
-
-## What we need
-
-Fix the bugs in `queue_state.py` and `report_generator.py` so the output metrics are correct. The entry point and log parser are fine — the issues are in how state gets tracked and how the report gets computed.
-
-The fingerprint is particularly tricky because it depends on the delivery_rate being correct first — so you need to fix the upstream bugs before the fingerprint will match.
-
-Python 3 standard library is available system-wide. No external packages needed.
