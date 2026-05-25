@@ -1,6 +1,6 @@
 """
 Tests for webhook-queue-repair task.
-Validates the webhook delivery replayer output files.
+Validates the webhook delivery replay analyzer output.
 """
 
 import json
@@ -40,120 +40,149 @@ def test_output_files_exist():
 
 
 def test_correct_webhook_count():
-    """Output must contain exactly 8 webhook records."""
+    """Output must contain exactly 12 webhook records."""
     records = load_webhook_status()
-    assert len(records) == 8, f"Expected 8 webhooks, got {len(records)}"
+    assert len(records) == 12, f"Expected 12 webhooks, got {len(records)}"
 
 
 def test_webhook_ids_present():
     """All expected webhook IDs must be in output."""
     records = load_webhook_status()
     ids = {r["webhook_id"] for r in records}
-    expected = {f"wh-00{i}" for i in range(1, 9)}
+    expected = {f"wh-{c}" for c in "ABCDEFGHIJKL"}
     assert ids == expected, f"Missing webhooks: {expected - ids}"
 
 
-def test_total_webhooks_field():
-    """Report must have total_webhooks=8."""
+def test_delivery_status_counts():
+    """11 delivered, 1 dead-lettered, 0 pending."""
     report = load_report()
-    assert report["total_webhooks"] == 8
-
-
-def test_delivered_count():
-    """5 webhooks were successfully delivered."""
-    report = load_report()
-    assert report["delivered"] == 5, f"Expected 5, got {report['delivered']}"
-
-
-def test_dead_letter_count():
-    """3 webhooks ended up in dead letter queue."""
-    report = load_report()
-    assert report["dead_lettered"] == 3, f"Expected 3, got {report['dead_lettered']}"
-
-
-def test_pending_count():
-    """No webhooks should be in pending state after full replay."""
-    report = load_report()
+    assert report["delivered"] == 11, f"Expected 11 delivered, got {report['delivered']}"
+    assert report["dead_lettered"] == 1, f"Expected 1 dead_lettered, got {report['dead_lettered']}"
     assert report["pending"] == 0, f"Expected 0 pending, got {report['pending']}"
 
 
-# ============================================================
-# TIER 2: Medium (requires fixing Bug 1 - attempt counting)
-# ============================================================
-
-def test_total_attempts_count():
-    """total_attempts must equal 17 (actual ATTEMPT events in log)."""
+def test_total_attempts():
+    """Total delivery attempts must equal 16."""
     report = load_report()
-    assert report["total_attempts"] == 17, (
-        f"Expected 17, got {report['total_attempts']}"
-    )
+    assert report["total_attempts"] == 16, f"Expected 16, got {report['total_attempts']}"
 
 
-def test_webhook_attempt_counts():
-    """Each webhook must have the correct number of attempts."""
-    records = load_webhook_status()
-    expected = {
-        "wh-001": 1, "wh-002": 4, "wh-003": 2, "wh-004": 1,
-        "wh-005": 3, "wh-006": 2, "wh-007": 1, "wh-008": 3,
-    }
-    for r in records:
-        wh_id = r["webhook_id"]
-        assert r["attempts"] == expected[wh_id], (
-            f"{wh_id}: expected {expected[wh_id]} attempts, got {r['attempts']}"
-        )
-
-
-# ============================================================
-# TIER 3: Hard (requires fixing Bug 2 - delivery rate formula)
-# ============================================================
-
-def test_delivery_rate():
-    """delivery_rate must be 0.625 (5 delivered / 8 total webhooks)."""
+def test_graph_edge_count():
+    """Dependency graph must have 11 edges."""
     report = load_report()
-    assert report["delivery_rate"] == 0.625, (
-        f"Expected 0.625, got {report['delivery_rate']}"
-    )
+    assert report["total_edges"] == 11, f"Expected 11, got {report['total_edges']}"
 
 
-def test_mean_latency():
-    """mean_latency_ms must be 1168 (average of delivered webhook durations only)."""
+def test_no_ordering_violations():
+    """The observed delivery order must have 0 causal violations."""
     report = load_report()
-    assert report["mean_latency_ms"] == 1168, (
-        f"Expected 1168, got {report['mean_latency_ms']}"
+    assert report["ordering_violations"] == 0, (
+        f"Expected 0 violations, got {report['ordering_violations']}"
     )
 
 
 # ============================================================
-# TIER 4: Hardest (requires ALL bugs fixed - fingerprint coupling)
+# TIER 2: Medium (requires fixing Bug 1 — independence check)
 # ============================================================
+
+def test_independent_pair_count():
+    """Independent pairs must equal 35 (using transitive closure, not adjacency)."""
+    report = load_report()
+    assert report["independent_pair_count"] == 35, (
+        f"Expected 35 independent pairs, got {report['independent_pair_count']}. "
+        f"Independence requires checking reachability (transitive closure), "
+        f"not just direct edges."
+    )
+
+
+def test_priority_ordering_top():
+    """wh-A must have highest priority (longest critical path of 5)."""
+    report = load_report()
+    assert report["priority_order"][0] == "wh-A", (
+        f"Expected wh-A as highest priority, got {report['priority_order'][0]}. "
+        f"Priority should reflect critical path length, not fan-out."
+    )
+
+
+# ============================================================
+# TIER 3: Hard (requires fixing Bug 2 — priority + parallel set)
+# ============================================================
+
+def test_parallel_replay_size():
+    """Parallel replay set must have exactly 6 webhooks."""
+    report = load_report()
+    assert report["parallel_replay_size"] == 6, (
+        f"Expected parallel set size 6, got {report['parallel_replay_size']}. "
+        f"The maximum antichain in this DAG has 6 mutually incomparable elements."
+    )
+
+
+def test_priority_ordering_chain():
+    """Priority ordering must reflect transitive downstream impact.
+
+    In the dependency chain A->B->C->D, each node transitively blocks all
+    downstream nodes. Priority must decrease along the chain: A > B > C > D.
+    This validates that priority accounts for the full depth of transitive
+    blocking, not just immediate fan-out.
+    """
+    report = load_report()
+    order = report["priority_order"]
+    pos = {wh: i for i, wh in enumerate(order)}
+    # A must come before B, B before C, C before D (chain ordering)
+    assert pos["wh-A"] < pos["wh-B"], (
+        f"wh-A (pos {pos['wh-A']}) should have higher priority than wh-B (pos {pos['wh-B']})"
+    )
+    assert pos["wh-B"] < pos["wh-C"], (
+        f"wh-B (pos {pos['wh-B']}) should have higher priority than wh-C (pos {pos['wh-C']})"
+    )
+    assert pos["wh-C"] < pos["wh-D"], (
+        f"wh-C (pos {pos['wh-C']}) should have higher priority than wh-D (pos {pos['wh-D']})"
+    )
+
+
+# ============================================================
+# TIER 4: Hardest (requires ALL bugs fixed — antichain + fingerprint)
+# ============================================================
+
+def test_parallel_set_is_antichain():
+    """Every pair in the parallel set must be truly causally independent."""
+    report = load_report()
+    parallel_set = report["parallel_replay_set"]
+    # The correct set contains only leaf-level nodes with no paths between them.
+    # Verify no element in the set is an ancestor/descendant of another.
+    # The correct antichain is: E, G, H, J, K, L (all leaves/near-leaves)
+    # If B or D appear, there's a causal violation (B->C->D path exists)
+    problematic = {"wh-A", "wh-B", "wh-C", "wh-D", "wh-F"}
+    found_problematic = set(parallel_set) & problematic
+    assert not found_problematic, (
+        f"Parallel set contains {found_problematic} which have causal paths "
+        f"to other nodes. Only truly incomparable nodes belong in the antichain."
+    )
+
+
+def test_parallel_set_members():
+    """Parallel replay set must be a valid maximum antichain of the DAG.
+
+    The DAG has exactly two maximum antichains of size 6:
+      - [wh-E, wh-G, wh-H, wh-J, wh-K, wh-L]
+      - [wh-E, wh-G, wh-H, wh-I, wh-K, wh-L]
+    Both are valid since wh-I and wh-J cannot coexist (I->J dependency).
+    The result must be one of these two valid antichains.
+    """
+    report = load_report()
+    result = sorted(report["parallel_replay_set"])
+    valid_1 = sorted(["wh-E", "wh-G", "wh-H", "wh-J", "wh-K", "wh-L"])
+    valid_2 = sorted(["wh-E", "wh-G", "wh-H", "wh-I", "wh-K", "wh-L"])
+    assert result == valid_1 or result == valid_2, (
+        f"Expected one of {valid_1} or {valid_2}, got {result}"
+    )
+
 
 def test_queue_fingerprint():
-    """Queue fingerprint must match expected deterministic value."""
+    """Queue fingerprint must match one of the valid deterministic values."""
     report = load_report()
-    assert report["queue_fingerprint"] == "26b5e8b9efbc94aa", (
-        f"Expected '26b5e8b9efbc94aa', got '{report['queue_fingerprint']}'"
+    # Fingerprint depends on which valid antichain was selected
+    valid_fingerprints = {"a424de727db259bd", "9db68d0c8dd89b08"}
+    assert report["queue_fingerprint"] in valid_fingerprints, (
+        f"Expected one of {valid_fingerprints}, got '{report['queue_fingerprint']}'"
     )
-
-
-def test_webhook_status_sorted():
-    """webhook_status.jsonl records must be sorted by webhook_id."""
-    records = load_webhook_status()
-    ids = [r["webhook_id"] for r in records]
-    assert ids == sorted(ids), "Records not sorted by webhook_id"
-
-
-def test_delivered_webhook_timestamps():
-    """Delivered webhooks must have correct delivered_at timestamps."""
-    records = load_webhook_status()
-    expected_delivered = {
-        "wh-001": 1716000005,
-        "wh-003": 1716000019,
-        "wh-004": 1716000042,
-        "wh-006": 1716000113,
-        "wh-007": 1716000122,
-    }
-    for r in records:
-        if r["status"] == "delivered":
-            assert r["delivered_at"] == expected_delivered[r["webhook_id"]], (
-                f"{r['webhook_id']}: wrong delivered_at"
-            )

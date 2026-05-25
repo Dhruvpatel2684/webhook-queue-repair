@@ -1,6 +1,9 @@
 """
 Log Parser Module
-Parses raw webhook delivery logs into structured event objects.
+Parses webhook delivery logs into structured event records.
+Handles REGISTER, DEPENDENCY, ATTEMPT, SUCCESS, FAILURE, and DEAD_LETTER events.
+
+This module is correct — no bugs here.
 """
 
 import os
@@ -29,18 +32,17 @@ def parse_log_line(line):
         return None
 
     timestamp_str, webhook_id, event_type, payload_str = parts
-    payload = parse_payload(payload_str)
 
     return {
         "timestamp": int(timestamp_str),
         "webhook_id": webhook_id,
         "event_type": event_type,
-        "payload": payload,
+        "payload": parse_payload(payload_str),
     }
 
 
 def load_events(log_path=None):
-    """Load all events from the log file, sorted by timestamp."""
+    """Load all events from the log file, ordered by timestamp."""
     if log_path is None:
         log_path = LOG_FILE
 

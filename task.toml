@@ -2,12 +2,12 @@ author_name = "Dhruvkumar Patel"
 author_email = "dhruvpatel2284@gmail.com"
 category = "networking"
 difficulty = "hard"
-tags = ["webhooks", "retry-queue", "delivery-pipeline", "state-machine", "debugging"]
-difficulty_explanation = "Requires understanding webhook delivery lifecycle and tracing data flow across queue_state.py and report_generator.py. Four bugs interact: inflated attempt counting affects delivery_rate, which feeds into the queue fingerprint hash. Mean latency bug requires understanding which webhooks should be included. The fingerprint test acts as an all-or-nothing gate requiring all upstream fixes to be correct simultaneously."
-solution_explanation = "The oracle re-implements the replay pipeline with corrected logic: removes pre-increment of total_attempts in _handle_enqueue, fixes delivery_rate to use delivered/total_webhooks formula, fixes mean_latency to only average delivered webhook durations, and sorts webhook iteration for deterministic fingerprint computation."
-verification_explanation = "14 tests in 4 difficulty tiers: basic structure (7 tests pass with buggy code), medium (2 tests require fixing attempt counting), hard (2 tests require fixing rate/latency formulas), and hardest (3 tests require all bugs fixed for fingerprint and sorted output). Reward requires all 14 tests to pass."
-expert_time_estimate_hours = 2.0
+tags = ["webhooks", "dependency-graph", "partial-order", "causal-ordering", "dag-scheduling"]
+difficulty_explanation = "Requires understanding partial order theory applied to webhook delivery. Three interacting bugs implement DIFFERENT VALID CONCEPTS from graph theory: adjacency vs reachability for independence, out-degree vs critical-path-length for priority, and descending-priority-greedy vs ascending-priority-greedy for antichain computation. Each bug produces plausible output and has misleading but internally consistent documentation. Fixing one bug alone doesn't fix the parallel set since all three interact in the greedy selection algorithm."
+solution_explanation = "The oracle re-implements the dependency graph analysis with corrected semantics: (1) are_causally_independent uses transitive closure (BFS reachability) instead of direct edge check, (2) compute_topological_priority uses longest-path-from-node (critical path) instead of out-degree (fan-out), (3) find_safe_parallel_set uses ascending priority order (leaves first) instead of descending (roots first) to maximize antichain size."
+verification_explanation = "14 tests in 4 tiers: structural tests (7) verify output format, webhook counts, delivery states, and graph structure — these pass with buggy code. Medium tests (2) check independence count and priority ordering direction. Hard tests (2) check parallel set size and priority chain ordering. Hardest tests (3) verify antichain property, exact parallel set membership, and fingerprint integrity. All 14 must pass for reward."
+expert_time_estimate_hours = 2.5
 
 [task]
 name = "webhook-queue-repair"
-description = "Debug a broken webhook delivery log replayer that produces incorrect queue state reports due to interacting bugs in attempt counting, delivery rate computation, and latency averaging across the state tracker and report generator modules."
+description = "Debug a webhook delivery replay analyzer where the dependency graph's independence checking, scheduling priority computation, and parallel set determination all implement wrong (but plausible) graph-theoretic concepts, producing incorrect causal ordering analysis."

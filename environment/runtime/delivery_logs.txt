@@ -1,59 +1,78 @@
-# Webhook Delivery Log
+# Webhook Delivery Log — Dependency-Aware Replay System
 # Format: TIMESTAMP|WEBHOOK_ID|EVENT_TYPE|PAYLOAD
-# Event types: ENQUEUE, ATTEMPT, SUCCESS, FAILURE, RETRY_SCHEDULED, DEAD_LETTER
-# Timestamps are Unix epoch seconds
+# Event types: REGISTER, DEPENDENCY, ATTEMPT, SUCCESS, FAILURE, DEAD_LETTER
+# REGISTER: webhook enters the system with endpoint and event metadata
+# DEPENDENCY: declares that this webhook must be delivered AFTER another
+# ATTEMPT/SUCCESS/FAILURE/DEAD_LETTER: delivery lifecycle events
+# Timestamps are Unix epoch milliseconds
 #
-1716000000|wh-001|ENQUEUE|endpoint=https://api.acme.com/hooks,event=order.created,max_retries=5
-1716000001|wh-002|ENQUEUE|endpoint=https://api.globex.io/callbacks,event=payment.completed,max_retries=3
-1716000002|wh-003|ENQUEUE|endpoint=https://hooks.initech.com/events,event=user.signup,max_retries=5
-1716000005|wh-001|ATTEMPT|attempt=1,status_code=200,duration_ms=145
-1716000005|wh-001|SUCCESS|attempt=1,delivered_at=1716000005
-1716000006|wh-002|ATTEMPT|attempt=1,status_code=500,duration_ms=3021
-1716000006|wh-002|FAILURE|attempt=1,reason=server_error
-1716000007|wh-002|RETRY_SCHEDULED|attempt=1,next_retry_at=1716000016,backoff_sec=10
-1716000008|wh-003|ATTEMPT|attempt=1,status_code=503,duration_ms=5000
-1716000008|wh-003|FAILURE|attempt=1,reason=service_unavailable
-1716000009|wh-003|RETRY_SCHEDULED|attempt=1,next_retry_at=1716000019,backoff_sec=10
-1716000016|wh-002|ATTEMPT|attempt=2,status_code=500,duration_ms=2890
-1716000016|wh-002|FAILURE|attempt=2,reason=server_error
-1716000017|wh-002|RETRY_SCHEDULED|attempt=2,next_retry_at=1716000037,backoff_sec=20
-1716000019|wh-003|ATTEMPT|attempt=2,status_code=200,duration_ms=230
-1716000019|wh-003|SUCCESS|attempt=2,delivered_at=1716000019
-1716000037|wh-002|ATTEMPT|attempt=3,status_code=502,duration_ms=4500
-1716000037|wh-002|FAILURE|attempt=3,reason=bad_gateway
-1716000038|wh-002|RETRY_SCHEDULED|attempt=3,next_retry_at=1716000078,backoff_sec=40
-1716000040|wh-004|ENQUEUE|endpoint=https://api.acme.com/hooks,event=order.shipped,max_retries=5
-1716000042|wh-004|ATTEMPT|attempt=1,status_code=200,duration_ms=98
-1716000042|wh-004|SUCCESS|attempt=1,delivered_at=1716000042
-1716000050|wh-005|ENQUEUE|endpoint=https://api.globex.io/callbacks,event=refund.processed,max_retries=3
-1716000052|wh-005|ATTEMPT|attempt=1,status_code=429,duration_ms=50
-1716000052|wh-005|FAILURE|attempt=1,reason=rate_limited
-1716000053|wh-005|RETRY_SCHEDULED|attempt=1,next_retry_at=1716000063,backoff_sec=10
-1716000063|wh-005|ATTEMPT|attempt=2,status_code=429,duration_ms=45
-1716000063|wh-005|FAILURE|attempt=2,reason=rate_limited
-1716000064|wh-005|RETRY_SCHEDULED|attempt=2,next_retry_at=1716000084,backoff_sec=20
-1716000078|wh-002|ATTEMPT|attempt=4,status_code=500,duration_ms=3100
-1716000078|wh-002|FAILURE|attempt=4,reason=server_error
-1716000078|wh-002|DEAD_LETTER|attempt=4,reason=max_retries_exhausted
-1716000084|wh-005|ATTEMPT|attempt=3,status_code=429,duration_ms=55
-1716000084|wh-005|FAILURE|attempt=3,reason=rate_limited
-1716000084|wh-005|DEAD_LETTER|attempt=3,reason=max_retries_exhausted
-1716000100|wh-006|ENQUEUE|endpoint=https://hooks.initech.com/events,event=user.deleted,max_retries=5
-1716000102|wh-006|ATTEMPT|attempt=1,status_code=404,duration_ms=67
-1716000102|wh-006|FAILURE|attempt=1,reason=not_found
-1716000103|wh-006|RETRY_SCHEDULED|attempt=1,next_retry_at=1716000113,backoff_sec=10
-1716000113|wh-006|ATTEMPT|attempt=2,status_code=200,duration_ms=189
-1716000113|wh-006|SUCCESS|attempt=2,delivered_at=1716000113
-1716000120|wh-007|ENQUEUE|endpoint=https://api.acme.com/hooks,event=order.cancelled,max_retries=5
-1716000122|wh-007|ATTEMPT|attempt=1,status_code=200,duration_ms=112
-1716000122|wh-007|SUCCESS|attempt=1,delivered_at=1716000122
-1716000130|wh-008|ENQUEUE|endpoint=https://api.globex.io/callbacks,event=subscription.renewed,max_retries=3
-1716000132|wh-008|ATTEMPT|attempt=1,status_code=500,duration_ms=2500
-1716000132|wh-008|FAILURE|attempt=1,reason=server_error
-1716000133|wh-008|RETRY_SCHEDULED|attempt=1,next_retry_at=1716000143,backoff_sec=10
-1716000143|wh-008|ATTEMPT|attempt=2,status_code=500,duration_ms=2800
-1716000143|wh-008|FAILURE|attempt=2,reason=server_error
-1716000144|wh-008|RETRY_SCHEDULED|attempt=2,next_retry_at=1716000164,backoff_sec=20
-1716000164|wh-008|ATTEMPT|attempt=3,status_code=500,duration_ms=3000
-1716000164|wh-008|FAILURE|attempt=3,reason=server_error
-1716000164|wh-008|DEAD_LETTER|attempt=3,reason=max_retries_exhausted
+1716000000|wh-A|REGISTER|endpoint=https://api.acme.com/hooks,event=order.created,priority=high
+1716000001|wh-B|REGISTER|endpoint=https://api.acme.com/hooks,event=order.payment_captured,priority=high
+1716000002|wh-C|REGISTER|endpoint=https://api.acme.com/hooks,event=order.fulfilled,priority=medium
+1716000003|wh-D|REGISTER|endpoint=https://api.acme.com/hooks,event=order.shipped,priority=medium
+1716000004|wh-E|REGISTER|endpoint=https://notify.acme.com/email,event=shipment.tracking_sent,priority=low
+1716000005|wh-F|REGISTER|endpoint=https://api.acme.com/hooks,event=order.delivered,priority=low
+1716000006|wh-G|REGISTER|endpoint=https://analytics.acme.com/ingest,event=order.completed,priority=low
+1716000007|wh-H|REGISTER|endpoint=https://notify.acme.com/email,event=review.requested,priority=low
+1716000008|wh-I|REGISTER|endpoint=https://api.partner.io/sync,event=inventory.decremented,priority=high
+1716000009|wh-J|REGISTER|endpoint=https://api.partner.io/sync,event=inventory.reserved,priority=medium
+1716000010|wh-K|REGISTER|endpoint=https://analytics.acme.com/ingest,event=funnel.checkout_complete,priority=medium
+1716000011|wh-L|REGISTER|endpoint=https://api.acme.com/hooks,event=invoice.generated,priority=medium
+#
+# Dependency declarations (must-deliver-after relationships)
+# wh-B depends on wh-A (payment captured after order created)
+1716000020|wh-B|DEPENDENCY|depends_on=wh-A
+# wh-C depends on wh-B (fulfilled after payment captured)
+1716000021|wh-C|DEPENDENCY|depends_on=wh-B
+# wh-D depends on wh-C (shipped after fulfilled)
+1716000022|wh-D|DEPENDENCY|depends_on=wh-C
+# wh-E depends on wh-D (tracking email after shipment)
+1716000023|wh-E|DEPENDENCY|depends_on=wh-D
+# wh-F depends on wh-D (delivered after shipped)
+1716000024|wh-F|DEPENDENCY|depends_on=wh-D
+# wh-G depends on wh-F (order completed after delivered)
+1716000025|wh-G|DEPENDENCY|depends_on=wh-F
+# wh-H depends on wh-F (review request after delivery)
+1716000026|wh-H|DEPENDENCY|depends_on=wh-F
+# wh-I depends on wh-A (inventory decrement after order created)
+1716000027|wh-I|DEPENDENCY|depends_on=wh-A
+# wh-J depends on wh-I (reservation after decrement)
+1716000028|wh-J|DEPENDENCY|depends_on=wh-I
+# wh-K depends on wh-B (funnel event after payment)
+1716000029|wh-K|DEPENDENCY|depends_on=wh-B
+# wh-L depends on wh-B (invoice after payment)
+1716000030|wh-L|DEPENDENCY|depends_on=wh-B
+#
+# Delivery attempts and outcomes
+1716000100|wh-A|ATTEMPT|attempt=1,status_code=200,duration_ms=142
+1716000100|wh-A|SUCCESS|delivered_at=1716000100
+1716000110|wh-I|ATTEMPT|attempt=1,status_code=200,duration_ms=88
+1716000110|wh-I|SUCCESS|delivered_at=1716000110
+1716000120|wh-B|ATTEMPT|attempt=1,status_code=503,duration_ms=5001
+1716000120|wh-B|FAILURE|reason=service_unavailable
+1716000130|wh-B|ATTEMPT|attempt=2,status_code=200,duration_ms=210
+1716000130|wh-B|SUCCESS|delivered_at=1716000130
+1716000140|wh-J|ATTEMPT|attempt=1,status_code=200,duration_ms=95
+1716000140|wh-J|SUCCESS|delivered_at=1716000140
+1716000150|wh-C|ATTEMPT|attempt=1,status_code=200,duration_ms=178
+1716000150|wh-C|SUCCESS|delivered_at=1716000150
+1716000160|wh-K|ATTEMPT|attempt=1,status_code=500,duration_ms=3200
+1716000160|wh-K|FAILURE|reason=server_error
+1716000170|wh-K|ATTEMPT|attempt=2,status_code=500,duration_ms=3100
+1716000170|wh-K|FAILURE|reason=server_error
+1716000180|wh-K|ATTEMPT|attempt=3,status_code=500,duration_ms=3050
+1716000180|wh-K|DEAD_LETTER|reason=max_retries_exhausted
+1716000190|wh-L|ATTEMPT|attempt=1,status_code=200,duration_ms=165
+1716000190|wh-L|SUCCESS|delivered_at=1716000190
+1716000200|wh-D|ATTEMPT|attempt=1,status_code=200,duration_ms=134
+1716000200|wh-D|SUCCESS|delivered_at=1716000200
+1716000210|wh-E|ATTEMPT|attempt=1,status_code=200,duration_ms=220
+1716000210|wh-E|SUCCESS|delivered_at=1716000210
+1716000220|wh-F|ATTEMPT|attempt=1,status_code=502,duration_ms=4500
+1716000220|wh-F|FAILURE|reason=bad_gateway
+1716000230|wh-F|ATTEMPT|attempt=2,status_code=200,duration_ms=190
+1716000230|wh-F|SUCCESS|delivered_at=1716000230
+1716000240|wh-G|ATTEMPT|attempt=1,status_code=200,duration_ms=156
+1716000240|wh-G|SUCCESS|delivered_at=1716000240
+1716000250|wh-H|ATTEMPT|attempt=1,status_code=200,duration_ms=201
+1716000250|wh-H|SUCCESS|delivered_at=1716000250

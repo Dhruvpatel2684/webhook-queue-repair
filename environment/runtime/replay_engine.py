@@ -1,13 +1,15 @@
 """
-Webhook Replay Engine - Main Entrypoint
-Orchestrates replay of webhook delivery logs and produces output files.
+Webhook Replay Engine — Dependency-Aware Delivery Orchestrator
+
+Entry point for the webhook delivery replay system. Processes delivery logs,
+builds the dependency graph, computes replay scheduling, and generates reports.
 
 Usage: python3 replay_engine.py
 
 Reads: delivery_logs.txt
 Produces:
-  - webhook_status.jsonl (per-webhook final state)
-  - delivery_report.json (summary statistics and queue fingerprint)
+  - webhook_status.jsonl (per-webhook final state, sorted by webhook_id)
+  - delivery_report.json (dependency analysis, scheduling metrics, and fingerprint)
 """
 
 import os
@@ -22,7 +24,7 @@ from report_generator import generate_report
 
 
 def main():
-    """Main execution: parse logs, replay through queue manager, write report."""
+    """Main execution: parse logs, build dependency state, write report."""
     log_path = os.path.join(RUNTIME_DIR, "delivery_logs.txt")
     events = load_events(log_path)
 
@@ -33,14 +35,17 @@ def main():
         manager.process_event(event)
 
     queue_state = manager.get_queue_state()
-    stats = manager.get_delivery_stats()
+    graph = manager.get_graph()
+    delivery_order = manager.get_delivery_order()
 
     print(f"Replay complete. {len(queue_state)} webhooks processed.")
-    print(f"Stats: {stats['total_attempts']} attempts, {stats['total_successes']} successes")
+    print(f"Dependency graph: {len(graph.nodes)} nodes, "
+          f"{sum(len(s) for s in graph.edges.values())} edges")
 
     jsonl_path, report_path = generate_report(
         queue_state=queue_state,
-        stats=stats,
+        graph=graph,
+        delivery_order=delivery_order,
         output_dir=RUNTIME_DIR,
     )
 
