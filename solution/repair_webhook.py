@@ -1,25 +1,28 @@
 """
 Repair script for webhook-queue-repair task.
-Re-processes the delivery log with corrected logic and overwrites output files.
+Re-processes the delivery log with corrected dependency analysis logic.
 
-Fixes applied:
-1. queue_state.py: Remove pre-increment of total_attempts in _handle_enqueue
-   (only ATTEMPT events should count toward total_attempts)
-2. report_generator.py: delivery_rate = delivered/total_webhooks (not successes/attempts)
-3. report_generator.py: mean_latency only averages delivered webhooks (not all)
-4. report_generator.py: fingerprint uses sorted iteration (deterministic order)
+Fixes applied to queue_state.py logic:
+1. are_causally_independent: Use transitive closure (BFS reachability) to determine
+   if two nodes are truly incomparable in the partial order, not just adjacency check.
+2. compute_topological_priority: Use longest-path-from-node (critical path length)
+   as the scheduling priority, not out-degree (immediate fan-out count).
+3. find_safe_parallel_set: Use ascending priority order (leaves first) for greedy
+   antichain construction, not descending (roots first).
 """
 
 import json
 import hashlib
 import os
+import sys
+from collections import defaultdict
 
 RUNTIME_DIR = "/app/runtime"
 LOG_FILE = os.path.join(RUNTIME_DIR, "delivery_logs.txt")
 
 
 # ============================================================
-# Log Parser (no bugs - same as original)
+# Log Parser (correct — same as original)
 # ============================================================
 
 def parse_payload(payload_str):
@@ -59,17 +62,126 @@ def load_events():
 
 
 # ============================================================
-# FIXED Queue State
+# FIXED Dependency Graph
+# ============================================================
+
+class DependencyGraph:
+    def __init__(self):
+        self.nodes = set()
+        self.edges = defaultdict(set)
+        self.reverse_edges = defaultdict(set)
+        self._reachable_cache = {}
+
+    def add_node(self, node_id):
+        self.nodes.add(node_id)
+
+    def add_edge(self, from_node, to_node):
+        self.nodes.add(from_node)
+        self.nodes.add(to_node)
+        self.edges[from_node].add(to_node)
+        self.reverse_edges[to_node].add(from_node)
+
+    def get_successors(self, node_id):
+        return self.edges.get(node_id, set())
+
+    def get_predecessors(self, node_id):
+        return self.reverse_edges.get(node_id, set())
+
+    def _get_reachable(self, node_id):
+        """Compute all nodes reachable from node_id via transitive closure."""
+        if node_id in self._reachable_cache:
+            return self._reachable_cache[node_id]
+        visited = set()
+        stack = [node_id]
+        while stack:
+            current = stack.pop()
+            for succ in self.edges.get(current, set()):
+                if succ not in visited:
+                    visited.add(succ)
+                    stack.append(succ)
+        self._reachable_cache[node_id] = visited
+        return visited
+
+    def are_causally_independent(self, node_a, node_b):
+        """
+        FIX: Two events are independent only if NEITHER can reach the other
+        through ANY path in the dependency graph (transitive closure).
+        The buggy version only checked direct edges (adjacency).
+        """
+        reachable_from_a = self._get_reachable(node_a)
+        reachable_from_b = self._get_reachable(node_b)
+        if node_b in reachable_from_a:
+            return False
+        if node_a in reachable_from_b:
+            return False
+        return True
+
+    def compute_topological_priority(self, node_id):
+        """
+        FIX: Priority = longest path from this node to any leaf (critical path).
+        The buggy version used out-degree (number of direct dependents).
+        Critical path length correctly captures how many downstream nodes
+        are transitively blocked by this node.
+        """
+        memo = {}
+
+        def _longest_path(node):
+            if node in memo:
+                return memo[node]
+            successors = self.edges.get(node, set())
+            if not successors:
+                memo[node] = 0
+                return 0
+            max_path = max(1 + _longest_path(s) for s in successors)
+            memo[node] = max_path
+            return max_path
+
+        return _longest_path(node_id)
+
+    def find_safe_parallel_set(self, candidates):
+        """
+        FIX: Find maximum antichain using ascending priority order (leaves first).
+        The buggy version used descending priority (roots first), which picks
+        high-priority nodes that dominate many others, resulting in smaller sets
+        with causal violations when combined with the adjacency-only independence check.
+
+        Ascending order (lowest priority first = leaf nodes) maximizes the antichain
+        because leaf nodes are more likely to be mutually incomparable.
+        """
+        if not candidates:
+            return set()
+
+        # FIX: Sort by priority ASCENDING (leaves first), then alphabetical
+        sorted_candidates = sorted(
+            candidates,
+            key=lambda n: (self.compute_topological_priority(n), n),
+        )
+
+        parallel_set = set()
+        for node in sorted_candidates:
+            can_add = True
+            for selected in parallel_set:
+                if not self.are_causally_independent(node, selected):
+                    can_add = False
+                    break
+            if can_add:
+                parallel_set.add(node)
+
+        return parallel_set
+
+
+# ============================================================
+# Webhook State (correct — same as original)
 # ============================================================
 
 class WebhookState:
-    def __init__(self, webhook_id, endpoint, event_name, max_retries):
+    def __init__(self, webhook_id, endpoint, event_name, priority):
         self.webhook_id = webhook_id
         self.endpoint = endpoint
         self.event_name = event_name
-        self.max_retries = max_retries
-        self.attempts = 0
+        self.priority = priority
         self.status = "pending"
+        self.attempts = 0
         self.delivered_at = None
         self.failure_reasons = []
         self.total_duration_ms = 0
@@ -79,22 +191,24 @@ class WebhookState:
             "webhook_id": self.webhook_id,
             "endpoint": self.endpoint,
             "event": self.event_name,
+            "priority": self.priority,
             "status": self.status,
             "attempts": self.attempts,
-            "max_retries": self.max_retries,
             "delivered_at": self.delivered_at,
             "failure_reasons": self.failure_reasons,
             "total_duration_ms": self.total_duration_ms,
         }
 
 
+# ============================================================
+# Queue Manager (correct — same as original)
+# ============================================================
+
 class DeliveryQueueManager:
     def __init__(self):
         self.webhooks = {}
-        self.total_attempts = 0
-        self.total_successes = 0
-        self.total_failures = 0
-        self.dead_letter_count = 0
+        self.graph = DependencyGraph()
+        self.delivery_order = []
 
     def process_event(self, event):
         event_type = event["event_type"]
@@ -102,17 +216,22 @@ class DeliveryQueueManager:
         if handler:
             handler(event)
 
-    def _handle_enqueue(self, event):
+    def _handle_register(self, event):
         wh_id = event["webhook_id"]
         payload = event["payload"]
         self.webhooks[wh_id] = WebhookState(
             webhook_id=wh_id,
             endpoint=payload.get("endpoint", ""),
             event_name=payload.get("event", ""),
-            max_retries=int(payload.get("max_retries", 3)),
+            priority=payload.get("priority", "medium"),
         )
-        # FIX: Do NOT increment total_attempts here.
-        # Attempts are only counted when ATTEMPT events occur.
+        self.graph.add_node(wh_id)
+
+    def _handle_dependency(self, event):
+        wh_id = event["webhook_id"]
+        depends_on = event["payload"].get("depends_on", "")
+        if depends_on:
+            self.graph.add_edge(depends_on, wh_id)
 
     def _handle_attempt(self, event):
         wh_id = event["webhook_id"]
@@ -122,7 +241,6 @@ class DeliveryQueueManager:
         wh.attempts += 1
         duration = int(event["payload"].get("duration_ms", 0))
         wh.total_duration_ms += duration
-        self.total_attempts += 1
 
     def _handle_success(self, event):
         wh_id = event["webhook_id"]
@@ -131,7 +249,7 @@ class DeliveryQueueManager:
         wh = self.webhooks[wh_id]
         wh.status = "delivered"
         wh.delivered_at = int(event["payload"].get("delivered_at", 0))
-        self.total_successes += 1
+        self.delivery_order.append(wh_id)
 
     def _handle_failure(self, event):
         wh_id = event["webhook_id"]
@@ -140,99 +258,115 @@ class DeliveryQueueManager:
         wh = self.webhooks[wh_id]
         reason = event["payload"].get("reason", "unknown")
         wh.failure_reasons.append(reason)
-        self.total_failures += 1
-
-    def _handle_retry_scheduled(self, event):
-        wh_id = event["webhook_id"]
-        if wh_id not in self.webhooks:
-            return
-        wh = self.webhooks[wh_id]
-        wh.next_retry_at = int(event["payload"].get("next_retry_at", 0))
 
     def _handle_dead_letter(self, event):
         wh_id = event["webhook_id"]
         if wh_id not in self.webhooks:
             return
-        wh = self.webhooks[wh_id]
-        wh.status = "dead_letter"
-        self.dead_letter_count += 1
+        self.webhooks[wh_id].status = "dead_letter"
 
     def get_queue_state(self):
         return {wh_id: wh.to_dict() for wh_id, wh in self.webhooks.items()}
 
-    def get_delivery_stats(self):
-        return {
-            "total_attempts": self.total_attempts,
-            "total_successes": self.total_successes,
-            "total_failures": self.total_failures,
-            "dead_letter_count": self.dead_letter_count,
-        }
+    def get_graph(self):
+        return self.graph
+
+    def get_delivery_order(self):
+        return self.delivery_order
 
 
 # ============================================================
-# FIXED Report Generator
+# Report Generator (correct — same as original)
 # ============================================================
 
-def compute_queue_fingerprint(queue_state, delivery_rate):
-    """FIX: Sort by webhook_id for deterministic output."""
-    fingerprint_input = ""
-    for wh_id in sorted(queue_state.keys()):  # FIX: sorted
+def compute_independent_pairs(graph):
+    nodes = sorted(graph.nodes)
+    independent_count = 0
+    independent_pairs = []
+    for i in range(len(nodes)):
+        for j in range(i + 1, len(nodes)):
+            if graph.are_causally_independent(nodes[i], nodes[j]):
+                independent_count += 1
+                independent_pairs.append((nodes[i], nodes[j]))
+    return independent_count, independent_pairs
+
+
+def compute_parallel_replay_set(graph, queue_state):
+    all_nodes = set(graph.nodes)
+    parallel_set = graph.find_safe_parallel_set(all_nodes)
+    return sorted(parallel_set)
+
+
+def compute_scheduling_priorities(graph):
+    priorities = {}
+    for node in sorted(graph.nodes):
+        priorities[node] = graph.compute_topological_priority(node)
+    sorted_nodes = sorted(graph.nodes, key=lambda n: (-priorities[n], n))
+    return sorted_nodes, priorities
+
+
+def compute_ordering_violations(graph, delivery_order):
+    delivered_set = set()
+    violations = 0
+    for wh_id in delivery_order:
+        predecessors = graph.get_predecessors(wh_id)
+        for pred in predecessors:
+            if pred not in delivered_set:
+                violations += 1
+        delivered_set.add(wh_id)
+    return violations
+
+
+def compute_fingerprint(graph, queue_state, independent_count, parallel_set):
+    fingerprint_data = ""
+    for node in sorted(graph.nodes):
+        successors = sorted(graph.edges.get(node, set()))
+        fingerprint_data += f"{node}:{','.join(successors)}|"
+    fingerprint_data += f"indep:{independent_count};"
+    fingerprint_data += f"parallel:{','.join(sorted(parallel_set))};"
+    for wh_id in sorted(queue_state.keys()):
         state = queue_state[wh_id]
-        fingerprint_input += f"{wh_id}:{state['status']}:{state['attempts']}:"
-        fingerprint_input += f"{state['total_duration_ms']}|"
-    fingerprint_input += f"rate:{delivery_rate}"
-    return hashlib.sha256(fingerprint_input.encode()).hexdigest()[:16]
+        fingerprint_data += f"{wh_id}={state['status']}:{state['attempts']};"
+    return hashlib.sha256(fingerprint_data.encode()).hexdigest()[:16]
 
 
-def compute_delivery_rate(stats, queue_state):
-    """FIX: Rate = delivered webhooks / total webhooks (not attempts)."""
-    total_webhooks = len(queue_state)
-    if total_webhooks == 0:
-        return 0.0
-    delivered = sum(1 for s in queue_state.values() if s["status"] == "delivered")
-    return round(delivered / total_webhooks, 4)
-
-
-def compute_mean_latency(queue_state):
-    """FIX: Only average latency for DELIVERED webhooks."""
-    total_latency = 0
-    delivered_count = 0
-    for wh_id, state in queue_state.items():
-        if state["status"] == "delivered":
-            total_latency += state["total_duration_ms"]
-            delivered_count += 1
-    if delivered_count == 0:
-        return 0
-    return round(total_latency / delivered_count)
-
-
-def generate_report(queue_state, stats):
-    """Write corrected output files."""
+def generate_report(queue_state, graph, delivery_order):
     output_dir = RUNTIME_DIR
 
+    # Write webhook_status.jsonl
     jsonl_path = os.path.join(output_dir, "webhook_status.jsonl")
     with open(jsonl_path, "w") as f:
         for wh_id in sorted(queue_state.keys()):
             state = queue_state[wh_id]
             f.write(json.dumps(state) + "\n")
 
-    delivery_rate = compute_delivery_rate(stats, queue_state)
-    mean_latency = compute_mean_latency(queue_state)
-    fingerprint = compute_queue_fingerprint(queue_state, delivery_rate)
+    # Compute metrics
+    independent_count, _ = compute_independent_pairs(graph)
+    parallel_set = compute_parallel_replay_set(graph, queue_state)
+    priority_order, priorities = compute_scheduling_priorities(graph)
+    violations = compute_ordering_violations(graph, delivery_order)
 
     total_webhooks = len(queue_state)
     delivered = sum(1 for s in queue_state.values() if s["status"] == "delivered")
     dead_lettered = sum(1 for s in queue_state.values() if s["status"] == "dead_letter")
     pending = sum(1 for s in queue_state.values() if s["status"] == "pending")
+    total_attempts = sum(s["attempts"] for s in queue_state.values())
+
+    fingerprint = compute_fingerprint(graph, queue_state, independent_count, parallel_set)
 
     report = {
         "total_webhooks": total_webhooks,
         "delivered": delivered,
         "dead_lettered": dead_lettered,
         "pending": pending,
-        "delivery_rate": delivery_rate,
-        "mean_latency_ms": mean_latency,
-        "total_attempts": stats["total_attempts"],
+        "total_attempts": total_attempts,
+        "total_edges": sum(len(s) for s in graph.edges.values()),
+        "independent_pair_count": independent_count,
+        "parallel_replay_set": parallel_set,
+        "parallel_replay_size": len(parallel_set),
+        "priority_order": priority_order,
+        "scheduling_priorities": priorities,
+        "ordering_violations": violations,
         "queue_fingerprint": fingerprint,
     }
 
@@ -254,12 +388,12 @@ def main():
         manager.process_event(event)
 
     queue_state = manager.get_queue_state()
-    stats = manager.get_delivery_stats()
-    generate_report(queue_state, stats)
+    graph = manager.get_graph()
+    delivery_order = manager.get_delivery_order()
 
-    print(f"Repair complete. Processed {len(events)} events.")
-    print(f"Total attempts: {stats['total_attempts']}")
-    print(f"Delivered: {stats['total_successes']}")
+    generate_report(queue_state, graph, delivery_order)
+
+    print(f"Repair complete. Processed {len(events)} events, {len(queue_state)} webhooks.")
 
 
 if __name__ == "__main__":
