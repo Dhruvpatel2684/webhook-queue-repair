@@ -1,71 +1,74 @@
-# Webhook Delivery Queue — Replay Broken After Deploy
+# CRDT Merge Engine - Debugging Task
 
-## What happened
+## Overview
+A merge engine processes operation logs from three distributed replicas (alpha, beta, gamma) and produces a converged state using CRDT semantics. It handles LWW (Last-Writer-Wins) registers and OR-set (Observed-Remove Set) data structures, plus generates a conflict report for high-contention keys.
 
-We run a webhook delivery service that retries failed HTTP callbacks with exponential backoff. We built a log replayer that processes delivery logs and produces a summary report of the queue state — how many delivered, how many dead-lettered, latency stats, etc.
+## System Environment
+- **Language**: Python 3.11
+- **Runtime**: `/app/runtime/` (source modules, configuration, operation logs, output)
+- **Global system-wide tooling**: `uv` and `pytest` are available
+- **No external packages required** - stdlib only
 
-Last Thursday someone pushed a "cleanup" that broke the reporting. The queue state tracking and the report generation are both producing wrong numbers now. We've been getting paged about incorrect SLA metrics and need this fixed ASAP.
+## Key Files
+| File | Purpose |
+|------|---------|
+| `/app/runtime/run_merge.py` | Entry point (correct) |
+| `/app/runtime/op_loader.py` | Loads operation logs from JSONL files (correct) |
+| `/app/runtime/lww_register.py` | Merges register operations using LWW semantics |
+| `/app/runtime/orset_merger.py` | Merges set operations using OR-Set semantics |
+| `/app/runtime/conflict_detector.py` | Identifies high-contention keys |
+| `/app/runtime/state_writer.py` | Writes output JSON files (correct) |
+| `/app/runtime/merge_config.ini` | Merge configuration parameters |
 
-## How it works
+## What's Wrong
 
-Four Python files in `/app/runtime/`:
+The engine runs without errors but the output is incorrect:
 
-- `replay_engine.py` — entry point, wires the pipeline together (this file is fine)
-- `log_parser.py` — reads `delivery_logs.txt`, turns lines into event dicts (this file is fine)
-- `queue_state.py` — processes events and maintains per-webhook delivery state
-- `report_generator.py` — computes metrics and writes output files
+- **Register values are wrong for some keys** - for example, `user:1001:name` should resolve to a specific value but the merge picks the wrong winner in some cases. The issue appears related to how operations are compared during the merge.
 
-The input log (`delivery_logs.txt`) records 8 webhooks going through their delivery lifecycle: enqueue, attempt, success/failure, retry scheduling, and dead-letter routing. The log is correct — don't modify it.
+- **Set element counts are incorrect** - some OR-sets have too few elements. Elements that should be present after the merge are missing, and elements that were removed still appear in some sets.
 
-## What's broken
+- **Conflict report has too many entries** - the conflict detector is flagging keys as high-conflict when they shouldn't be.
 
-Several metrics in the output are wrong:
+## Expected Output
 
-- **Attempt counting is inflated** — total_attempts shows way more than the actual delivery attempts in the log. Something is counting events that aren't real delivery attempts.
+When working correctly, the engine should produce:
 
-- **Delivery rate is wrong** — the rate should reflect what fraction of webhooks eventually got delivered successfully (a queue-level metric), but it's showing something much lower that looks like a per-attempt probability.
+- `/app/runtime/output/merged_state.json` - merged register values and set contents
+- `/app/runtime/output/conflict_report.json` - high-contention key report
 
-- **Mean latency is too high** — mean_latency_ms should only reflect the response time of webhooks that actually made it through. Instead it seems to be averaging in the durations of failed deliveries from endpoints that never came back online.
+## Output Schema
 
-- **Fingerprint is unstable** — the queue_fingerprint changes between runs. The hash computation depends on data that's wrong due to the other bugs, plus the iteration order may not be deterministic.
+### `/app/runtime/output/merged_state.json`
+| Field | Type | Description |
+|-------|------|-------------|
+| `registers` | object | Map of key to register state |
+| `registers.<key>.value` | string | The winning value for this register |
+| `registers.<key>.timestamp` | string | Timestamp of the winning write |
+| `registers.<key>.replica` | string | Replica that produced the winning write |
+| `sets` | object | Map of key to set elements |
+| `sets.<key>` | array | List of element objects in the set |
+| `sets.<key>[].value` | string | Element value |
+| `sets.<key>[].element_id` | string | Unique element tag |
+| `state_digest` | string | 16-char hex integrity hash of merged state |
+| `total_registers` | int | Count of register keys |
+| `total_sets` | int | Count of set keys |
 
-## Output file format
+### `/app/runtime/output/conflict_report.json`
+| Field | Type | Description |
+|-------|------|-------------|
+| `high_conflict_entries` | array | Keys exceeding the conflict threshold |
+| `high_conflict_entries[].key` | string | The contended key |
+| `high_conflict_entries[].write_count` | int | Number of distinct replicas that wrote |
+| `high_conflict_entries[].replicas` | array | Sorted list of writing replicas |
+| `high_conflict_entries[].severity` | string | Always "high" |
+| `total_conflicts` | int | Count of high-conflict entries |
 
-The replayer produces two files in `/app/runtime/`:
+## Your Task
+Identify and fix the defects in the merge logic. The entry point, operation loader, state writer, configuration file, and operation log files are all correct and should not be modified.
 
-**`webhook_status.jsonl`** — one JSON record per line (sorted by webhook_id), each with:
-- `webhook_id` (string): webhook identifier
-- `endpoint` (string): target URL
-- `event` (string): event type that triggered this webhook
-- `status` (string): "delivered", "dead_letter", or "pending"
-- `attempts` (int): number of delivery attempts made
-- `max_retries` (int): configured retry limit
-- `delivered_at` (int or null): timestamp of successful delivery
-- `failure_reasons` (array of strings): reasons for each failed attempt
-- `total_duration_ms` (int): cumulative HTTP response time across all attempts
-
-**`delivery_report.json`** — summary statistics:
-- `total_webhooks` (int): number of webhooks processed
-- `delivered` (int): webhooks that succeeded
-- `dead_lettered` (int): webhooks that exhausted retries
-- `pending` (int): webhooks still awaiting delivery
-- `delivery_rate` (float): fraction of webhooks delivered successfully
-- `mean_latency_ms` (int): average response time for delivered webhooks
-- `total_attempts` (int): total delivery attempts made
-- `queue_fingerprint` (string): 16-char hex hash for integrity verification
-
-## How to run
-
+After fixing the bugs, re-run:
 ```bash
-python3 /app/runtime/replay_engine.py
+cd /app
+python3 -m runtime.run_merge
 ```
-
-This regenerates `webhook_status.jsonl` and `delivery_report.json` in `/app/runtime/`.
-
-## What we need
-
-Fix the bugs in `queue_state.py` and `report_generator.py` so the output metrics are correct. The entry point and log parser are fine — the issues are in how state gets tracked and how the report gets computed.
-
-The fingerprint is particularly tricky because it depends on the delivery_rate being correct first — so you need to fix the upstream bugs before the fingerprint will match.
-
-Python 3 standard library is available system-wide. No external packages needed.
