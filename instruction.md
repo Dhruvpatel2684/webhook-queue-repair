@@ -1,71 +1,67 @@
-# Webhook Delivery Queue — Replay Broken After Deploy
+# Pass Scheduler Repair
 
-## What happened
+## Overview
 
-We run a webhook delivery service that retries failed HTTP callbacks with exponential backoff. We built a log replayer that processes delivery logs and produces a summary report of the queue state — how many delivered, how many dead-lettered, latency stats, etc.
+A compiler optimization pass scheduler reads pass definitions from CSV manifests, resolves dependencies, and produces a phased execution schedule. The system filters passes by category, respects dependency chains, and assigns passes to phases with capacity constraints.
 
-Last Thursday someone pushed a "cleanup" that broke the reporting. The queue state tracking and the report generation are both producing wrong numbers now. We've been getting paged about incorrect SLA metrics and need this fixed ASAP.
+The scheduler is producing incorrect output. Some passes are incorrectly rejected, the phase count is wrong, category metrics in the report are inflated, and ordering within phases is unstable across runs.
 
-## How it works
+## System Architecture
 
-Four Python files in `/app/runtime/`:
+The scheduler is composed of the following modules:
 
-- `replay_engine.py` — entry point, wires the pipeline together (this file is fine)
-- `log_parser.py` — reads `delivery_logs.txt`, turns lines into event dicts (this file is fine)
-- `queue_state.py` — processes events and maintains per-webhook delivery state
-- `report_generator.py` — computes metrics and writes output files
+- `/app/runtime/run_passes.py` - Entry point that orchestrates the scheduling flow
+- `/app/runtime/pass_loader.py` - Loads pass definitions from CSV manifest files
+- `/app/runtime/dependency_resolver.py` - Resolves dependencies and schedules passes into phases
+- `/app/runtime/phase_aggregator.py` - Aggregates phase metrics into category summaries
+- `/app/runtime/report_writer.py` - Writes schedule and report JSON to the output directory
+- `/app/runtime/passes.ini` - Configuration for the scheduler
+- `/app/runtime/passes_frontend.csv` - Frontend pass manifest
+- `/app/runtime/passes_middle.csv` - Middle-tier pass manifest
+- `/app/runtime/passes_backend.csv` - Backend pass manifest
 
-The input log (`delivery_logs.txt`) records 8 webhooks going through their delivery lifecycle: enqueue, attempt, success/failure, retry scheduling, and dead-letter routing. The log is correct — don't modify it.
+## Configuration
 
-## What's broken
+The `passes.ini` configuration file controls scheduler behavior:
 
-Several metrics in the output are wrong:
+- The `[passes]` section defines active categories and the dependency chain depth limit
+- The `[passes.optimized]` section contains production-tuned phase capacity after profiling real workloads
+- The `[resolver]` section specifies tie-breaking strategy for deterministic output
 
-- **Attempt counting is inflated** — total_attempts shows way more than the actual delivery attempts in the log. Something is counting events that aren't real delivery attempts.
+## Scheduling Rules
 
-- **Delivery rate is wrong** — the rate should reflect what fraction of webhooks eventually got delivered successfully (a queue-level metric), but it's showing something much lower that looks like a per-attempt probability.
+1. Passes are loaded from all three CSV manifests
+2. Only passes whose category appears in `active_categories` are scheduled; others are rejected
+3. Passes with dependency chain depth exceeding `max_chain_depth` are blocked
+4. Remaining passes are sorted by priority (descending), then submitted_order (ascending), then ties at equal priority and submission order are broken by originating module name alphabetically
+5. Passes are assigned to phases respecting dependency ordering and phase capacity limits
+6. Each category's final summary reflects the most recent phase snapshot, not accumulated totals
 
-- **Mean latency is too high** — mean_latency_ms should only reflect the response time of webhooks that actually made it through. Instead it seems to be averaging in the durations of failed deliveries from endpoints that never came back online.
+## Output
 
-- **Fingerprint is unstable** — the queue_fingerprint changes between runs. The hash computation depends on data that's wrong due to the other bugs, plus the iteration order may not be deterministic.
+The scheduler produces two files in `/app/output/`:
 
-## Output file format
+- `schedule.json` - Contains phase assignments, rejected passes, and blocked passes
+- `report.json` - Contains per-category summaries and overall statistics
 
-The replayer produces two files in `/app/runtime/`:
-
-**`webhook_status.jsonl`** — one JSON record per line (sorted by webhook_id), each with:
-- `webhook_id` (string): webhook identifier
-- `endpoint` (string): target URL
-- `event` (string): event type that triggered this webhook
-- `status` (string): "delivered", "dead_letter", or "pending"
-- `attempts` (int): number of delivery attempts made
-- `max_retries` (int): configured retry limit
-- `delivered_at` (int or null): timestamp of successful delivery
-- `failure_reasons` (array of strings): reasons for each failed attempt
-- `total_duration_ms` (int): cumulative HTTP response time across all attempts
-
-**`delivery_report.json`** — summary statistics:
-- `total_webhooks` (int): number of webhooks processed
-- `delivered` (int): webhooks that succeeded
-- `dead_lettered` (int): webhooks that exhausted retries
-- `pending` (int): webhooks still awaiting delivery
-- `delivery_rate` (float): fraction of webhooks delivered successfully
-- `mean_latency_ms` (int): average response time for delivered webhooks
-- `total_attempts` (int): total delivery attempts made
-- `queue_fingerprint` (string): 16-char hex hash for integrity verification
-
-## How to run
+## Running
 
 ```bash
-python3 /app/runtime/replay_engine.py
+python3 -m runtime.run_passes
 ```
 
-This regenerates `webhook_status.jsonl` and `delivery_report.json` in `/app/runtime/`.
+Output is written to `/app/output/`.
 
-## What we need
+## Testing
 
-Fix the bugs in `queue_state.py` and `report_generator.py` so the output metrics are correct. The entry point and log parser are fine — the issues are in how state gets tracked and how the report gets computed.
+Global system-wide tooling uses uv and pytest:
 
-The fingerprint is particularly tricky because it depends on the delivery_rate being correct first — so you need to fix the upstream bugs before the fingerprint will match.
+```bash
+uv run --with pytest pytest /tests/test_passes.py -v
+```
 
-Python 3 standard library is available system-wide. No external packages needed.
+## Constraints
+
+- All code uses Python standard library only (no external packages in runtime)
+- The CSV manifests and passes.ini are correct and should not be modified
+- Only `/app/runtime/dependency_resolver.py` and `/app/runtime/phase_aggregator.py` contain defects

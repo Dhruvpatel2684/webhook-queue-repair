@@ -1,13 +1,37 @@
 author_name = "Dhruvkumar Patel"
 author_email = "dhruvpatel2284@gmail.com"
-category = "networking"
+category = "compiler_engineering"
 difficulty = "hard"
-tags = ["webhooks", "retry-queue", "delivery-pipeline", "state-machine", "debugging"]
-difficulty_explanation = "Requires understanding webhook delivery lifecycle and tracing data flow across queue_state.py and report_generator.py. Four bugs interact: inflated attempt counting affects delivery_rate, which feeds into the queue fingerprint hash. Mean latency bug requires understanding which webhooks should be included. The fingerprint test acts as an all-or-nothing gate requiring all upstream fixes to be correct simultaneously."
-solution_explanation = "The oracle re-implements the replay pipeline with corrected logic: removes pre-increment of total_attempts in _handle_enqueue, fixes delivery_rate to use delivered/total_webhooks formula, fixes mean_latency to only average delivered webhook durations, and sorts webhook iteration for deterministic fingerprint computation."
-verification_explanation = "14 tests in 4 difficulty tiers: basic structure (7 tests pass with buggy code), medium (2 tests require fixing attempt counting), hard (2 tests require fixing rate/latency formulas), and hardest (3 tests require all bugs fixed for fingerprint and sorted output). Reward requires all 14 tests to pass."
-expert_time_estimate_hours = 2.0
+tags = ["compiler-passes", "optimization-scheduler", "dependency-resolution", "config-parsing", "debugging"]
+
+difficulty_explanation = "Five interacting bugs: whitespace in config parsing drops a category (in 2 files), wrong config section for capacity, off-by-one in chain depth threshold, accumulation vs last-write-wins in phase aggregation, and sort key using pass_id instead of module_name. Bugs interact: capacity affects phase count which affects aggregation; category filter affects which passes are in the dependency graph."
+solution_explanation = "Fix strip() in two files, change config section, change >= to > for chain depth, change += to = in aggregation, change sort key from pass_id to module_name."
+verification_explanation = "15 tests across 4 tiers. Basic tests pass with buggy code. Medium tests need category filtering fixed. Hard tests need capacity, aggregation, and chain depth fixed. Hardest tests need all 5 bugs fixed for correct digest and ordering."
+expert_time_estimate_hours = 3.5
 
 [task]
-name = "webhook-queue-repair"
-description = "Debug a broken webhook delivery log replayer that produces incorrect queue state reports due to interacting bugs in attempt counting, delivery rate computation, and latency averaging across the state tracker and report generator modules."
+name = "pass-scheduler-repair"
+description = "Debug a compiler optimization pass scheduler with interacting bugs in category filtering, phase capacity, dependency chain validation, metric aggregation, and priority ordering."
+
+[task.difficulty]
+level = "hard"
+reasoning = "Five bugs across two files with cross-cutting interactions. The off-by-one is subtle (>= vs >), the config section requires reading another section's comments, and the aggregation bug has no docstring hint."
+
+[task.runtime]
+entrypoint = "python3 -m runtime.run_passes"
+language = "python"
+dependencies = "stdlib-only"
+
+[task.validator]
+command = "bash tests/test.sh"
+description = "Pytest suite validating pass scheduling output."
+
+[task.repair]
+command = "bash solution/solve.sh"
+description = "Patches dependency_resolver.py and phase_aggregator.py then re-runs."
+
+[task.resources]
+timeout = 300
+cpu = 2
+memory = "2GB"
+disk = "1GB"
