@@ -78,7 +78,7 @@ def test_pending_count():
 
 
 # ============================================================
-# TIER 2: Medium (requires fixing Bug 1 - attempt counting)
+# TIER 2: Attempt counting (requires fixing overcounting bugs)
 # ============================================================
 
 def test_total_attempts_count():
@@ -104,7 +104,7 @@ def test_webhook_attempt_counts():
 
 
 # ============================================================
-# TIER 3: Hard (requires fixing Bug 2 - delivery rate formula)
+# TIER 3: Derived metrics (requires fixing rate and latency)
 # ============================================================
 
 def test_delivery_rate():
@@ -124,7 +124,7 @@ def test_mean_latency():
 
 
 # ============================================================
-# TIER 4: Hardest (requires ALL bugs fixed - fingerprint coupling)
+# TIER 4: Fingerprint integrity (requires ALL bugs fixed)
 # ============================================================
 
 def test_queue_fingerprint():

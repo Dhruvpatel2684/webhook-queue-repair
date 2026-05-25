@@ -1,71 +1,55 @@
-# Webhook Delivery Queue — Replay Broken After Deploy
+# Webhook Delivery Queue — Production Metrics Incident
 
-## What happened
+## Incident Summary
 
-We run a webhook delivery service that retries failed HTTP callbacks with exponential backoff. We built a log replayer that processes delivery logs and produces a summary report of the queue state — how many delivered, how many dead-lettered, latency stats, etc.
+Our webhook delivery service processes retry-based HTTP callbacks with exponential backoff. On Monday, SRE flagged an anomaly in the delivery dashboard: success rates looked implausibly low, attempt counters didn't match what we see in the raw logs, and the queue integrity fingerprint was drifting between deploys.
 
-Last Thursday someone pushed a "cleanup" that broke the reporting. The queue state tracking and the report generation are both producing wrong numbers now. We've been getting paged about incorrect SLA metrics and need this fixed ASAP.
+We've traced the issue to the replay pipeline that reconstructs queue state from delivery logs. The pipeline consists of four Python modules — the log parser and replay engine are functioning correctly, but the state tracker and report generator are producing incorrect metrics.
 
-## How it works
+## Architecture
 
-Four Python files in `/app/runtime/`:
+Four files in `/app/runtime/`:
 
-- `replay_engine.py` — entry point, wires the pipeline together (this file is fine)
-- `log_parser.py` — reads `delivery_logs.txt`, turns lines into event dicts (this file is fine)
-- `queue_state.py` — processes events and maintains per-webhook delivery state
-- `report_generator.py` — computes metrics and writes output files
+- `replay_engine.py` — orchestration layer, wires pipeline together (verified correct)
+- `log_parser.py` — ingests `delivery_logs.txt` into event stream (verified correct)
+- `queue_state.py` — maintains per-webhook state through the delivery lifecycle
+- `report_generator.py` — computes aggregate metrics and writes output artifacts
 
-The input log (`delivery_logs.txt`) records 8 webhooks going through their delivery lifecycle: enqueue, attempt, success/failure, retry scheduling, and dead-letter routing. The log is correct — don't modify it.
+The delivery log captures the full lifecycle of 8 webhooks: enqueue, attempt, success/failure, retry scheduling, and dead-letter routing. The log data is authoritative — do not modify it.
 
-## What's broken
+## Observed Symptoms
 
-Several metrics in the output are wrong:
+1. **Attempt counter divergence** — `total_attempts` in the report is significantly higher than the number of actual HTTP delivery attempts visible in the log. The counter appears to be accumulating events that aren't delivery attempts.
 
-- **Attempt counting is inflated** — total_attempts shows way more than the actual delivery attempts in the log. Something is counting events that aren't real delivery attempts.
+2. **Delivery rate suppressed** — The reported rate is far lower than what our endpoint monitoring shows. We know 5 out of 8 webhooks were delivered successfully, but the metric doesn't reflect that ratio.
 
-- **Delivery rate is wrong** — the rate should reflect what fraction of webhooks eventually got delivered successfully (a queue-level metric), but it's showing something much lower that looks like a per-attempt probability.
+3. **Latency skew** — `mean_latency_ms` is higher than expected. Dead-lettered endpoints that timed out repeatedly seem to be dragging the average up, even though latency should only reflect successful deliveries.
 
-- **Mean latency is too high** — mean_latency_ms should only reflect the response time of webhooks that actually made it through. Instead it seems to be averaging in the durations of failed deliveries from endpoints that never came back online.
+4. **Fingerprint instability** — `queue_fingerprint` doesn't match our reference value. This is likely downstream of the other metric errors since the fingerprint incorporates the delivery rate.
 
-- **Fingerprint is unstable** — the queue_fingerprint changes between runs. The hash computation depends on data that's wrong due to the other bugs, plus the iteration order may not be deterministic.
+## Output Specification
 
-## Output file format
+The pipeline produces two files in `/app/runtime/`:
 
-The replayer produces two files in `/app/runtime/`:
+**`webhook_status.jsonl`** — one JSON record per line (sorted by webhook_id):
+- `webhook_id`, `endpoint`, `event`, `status`, `attempts`, `max_retries`, `delivered_at`, `failure_reasons`, `total_duration_ms`
 
-**`webhook_status.jsonl`** — one JSON record per line (sorted by webhook_id), each with:
-- `webhook_id` (string): webhook identifier
-- `endpoint` (string): target URL
-- `event` (string): event type that triggered this webhook
-- `status` (string): "delivered", "dead_letter", or "pending"
-- `attempts` (int): number of delivery attempts made
-- `max_retries` (int): configured retry limit
-- `delivered_at` (int or null): timestamp of successful delivery
-- `failure_reasons` (array of strings): reasons for each failed attempt
-- `total_duration_ms` (int): cumulative HTTP response time across all attempts
-
-**`delivery_report.json`** — summary statistics:
-- `total_webhooks` (int): number of webhooks processed
-- `delivered` (int): webhooks that succeeded
-- `dead_lettered` (int): webhooks that exhausted retries
-- `pending` (int): webhooks still awaiting delivery
+**`delivery_report.json`** — aggregate metrics:
+- `total_webhooks` (int): webhooks processed
+- `delivered` (int): successful deliveries
+- `dead_lettered` (int): exhausted retries
+- `pending` (int): still awaiting delivery
 - `delivery_rate` (float): fraction of webhooks delivered successfully
 - `mean_latency_ms` (int): average response time for delivered webhooks
 - `total_attempts` (int): total delivery attempts made
-- `queue_fingerprint` (string): 16-char hex hash for integrity verification
+- `queue_fingerprint` (string): 16-char hex integrity hash
 
-## How to run
+## Execution
 
 ```bash
 python3 /app/runtime/replay_engine.py
 ```
 
-This regenerates `webhook_status.jsonl` and `delivery_report.json` in `/app/runtime/`.
+## Objective
 
-## What we need
-
-Fix the bugs in `queue_state.py` and `report_generator.py` so the output metrics are correct. The entry point and log parser are fine — the issues are in how state gets tracked and how the report gets computed.
-
-The fingerprint is particularly tricky because it depends on the delivery_rate being correct first — so you need to fix the upstream bugs before the fingerprint will match.
-
-Python 3 standard library is available system-wide. No external packages needed.
+Fix the bugs in `queue_state.py` and `report_generator.py` so all output metrics are correct. The replay engine and log parser are not broken.

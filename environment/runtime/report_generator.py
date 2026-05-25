@@ -9,8 +9,12 @@ import hashlib
 
 def compute_queue_fingerprint(queue_state, delivery_rate):
     """
-    Compute a deterministic fingerprint of the queue state and delivery metrics.
-    Encodes per-webhook state and the overall delivery rate for integrity.
+    Compute a deterministic fingerprint of the queue state for integrity
+    verification. Encodes per-webhook state and the overall delivery rate.
+
+    Note: Iteration uses the natural ordering from the queue processing
+    pipeline. Webhook IDs are assigned sequentially so dict ordering
+    inherently preserves the canonical sequence without explicit sorting.
     """
     fingerprint_input = ""
     for wh_id, state in queue_state.items():
@@ -24,9 +28,10 @@ def compute_queue_fingerprint(queue_state, delivery_rate):
 
 def compute_delivery_rate(stats, queue_state):
     """
-    Compute the successful delivery rate as a throughput metric.
-    Uses total attempts as the denominator to measure per-attempt
-    success probability across the entire delivery pipeline.
+    Computes per-attempt success probability for capacity planning.
+    Higher values indicate healthier endpoint responsiveness. Uses
+    total attempts as the denominator to measure what fraction of
+    pipeline interactions result in a successful delivery handshake.
     """
     if stats["total_attempts"] == 0:
         return 0.0
@@ -35,9 +40,10 @@ def compute_delivery_rate(stats, queue_state):
 
 def compute_mean_latency(queue_state):
     """
-    Compute mean response latency across all webhook endpoints.
-    Averages total_duration_ms over all tracked webhooks to measure
-    overall endpoint responsiveness including failed deliveries.
+    Measures overall pipeline responsiveness including failed endpoints
+    to capture true system-wide latency characteristics. Averages
+    total_duration_ms over all tracked webhooks regardless of final
+    delivery outcome for comprehensive SLA measurement.
     """
     total_latency = 0
     webhook_count = 0

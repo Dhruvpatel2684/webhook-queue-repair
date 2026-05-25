@@ -3,11 +3,18 @@ Repair script for webhook-queue-repair task.
 Re-processes the delivery log with corrected logic and overwrites output files.
 
 Fixes applied:
-1. queue_state.py: Remove pre-increment of total_attempts in _handle_enqueue
+1. queue_state.py _handle_enqueue: Remove pre-increment of total_attempts
    (only ATTEMPT events should count toward total_attempts)
-2. report_generator.py: delivery_rate = delivered/total_webhooks (not successes/attempts)
-3. report_generator.py: mean_latency only averages delivered webhooks (not all)
-4. report_generator.py: fingerprint uses sorted iteration (deterministic order)
+2. queue_state.py _handle_failure: Remove increment of total_attempts
+   (failure events are not additional attempts — they're outcomes of attempts
+    already counted in _handle_attempt)
+3. report_generator.py: delivery_rate = delivered/total_webhooks
+   (not successes/total_attempts)
+4. report_generator.py: mean_latency only averages delivered webhooks
+   (not all webhooks)
+5. report_generator.py: fingerprint uses sorted iteration for determinism
+   (in practice iteration order matches sorted order for this data, but
+    explicit sorting is the correct approach)
 """
 
 import json
@@ -141,6 +148,8 @@ class DeliveryQueueManager:
         reason = event["payload"].get("reason", "unknown")
         wh.failure_reasons.append(reason)
         self.total_failures += 1
+        # FIX: Do NOT increment total_attempts here.
+        # Failures are outcomes of attempts already counted in _handle_attempt.
 
     def _handle_retry_scheduled(self, event):
         wh_id = event["webhook_id"]
@@ -176,7 +185,7 @@ class DeliveryQueueManager:
 def compute_queue_fingerprint(queue_state, delivery_rate):
     """FIX: Sort by webhook_id for deterministic output."""
     fingerprint_input = ""
-    for wh_id in sorted(queue_state.keys()):  # FIX: sorted
+    for wh_id in sorted(queue_state.keys()):
         state = queue_state[wh_id]
         fingerprint_input += f"{wh_id}:{state['status']}:{state['attempts']}:"
         fingerprint_input += f"{state['total_duration_ms']}|"

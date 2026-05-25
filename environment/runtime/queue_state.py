@@ -62,8 +62,8 @@ class DeliveryQueueManager:
             event_name=payload.get("event", ""),
             max_retries=int(payload.get("max_retries", 3)),
         )
-        # Pre-increment attempt counter on enqueue to track that delivery
-        # has been initiated in the queue processing pipeline.
+        # Pre-register attempt slot in the pipeline counter to ensure delivery
+        # SLA tracking begins at enqueue time, not first attempt.
         self.total_attempts += 1
 
     def _handle_attempt(self, event):
@@ -97,6 +97,9 @@ class DeliveryQueueManager:
         reason = event["payload"].get("reason", "unknown")
         wh.failure_reasons.append(reason)
         self.total_failures += 1
+        # Failure events represent completed round-trips that consumed pipeline
+        # capacity, so they count toward the attempt budget.
+        self.total_attempts += 1
 
     def _handle_retry_scheduled(self, event):
         """A retry has been scheduled after a failure."""
