@@ -1,71 +1,98 @@
-# Webhook Delivery Queue — Replay Broken After Deploy
+# Job Scheduler Engine — Debugging Task
 
-## What happened
+## Overview
+A priority-based job scheduler processes job manifests from multiple workload queues, applies scheduling policies with resource pool constraints, and produces execution plans with per-pool resource allocation reports. Jobs are assigned to scheduling rounds based on priority and concurrency limits.
 
-We run a webhook delivery service that retries failed HTTP callbacks with exponential backoff. We built a log replayer that processes delivery logs and produces a summary report of the queue state — how many delivered, how many dead-lettered, latency stats, etc.
+## System Environment
+- **Language**: Python 3.11
+- **Runtime**: `/app/runtime/` (source modules, configuration, job manifests, output)
+- **Global system-wide tooling**: `uv` and `pytest` are available
+- **No external packages required** — stdlib only
 
-Last Thursday someone pushed a "cleanup" that broke the reporting. The queue state tracking and the report generation are both producing wrong numbers now. We've been getting paged about incorrect SLA metrics and need this fixed ASAP.
+## Processing Stages
+1. **Job Loading** — Queue CSV files (`queue_batch.csv`, `queue_realtime.csv`, `queue_maintenance.csv`) are loaded and merged into a unified time-sorted job stream. This stage is correct.
 
-## How it works
+2. **Configuration** — `scheduler.ini` provides resource pool validation and scheduling parameters. The `[scheduler.production]` section contains production-tuned concurrency limits that should be used for round sizing.
 
-Four Python files in `/app/runtime/`:
+3. **Priority Scheduling** — Jobs are filtered to valid resource pools, then sorted by priority descending. Ties at the same priority and submission time are broken by queue_name alphabetically for deterministic scheduling. Jobs are assigned to rounds with at most max_concurrent jobs per round.
 
-- `replay_engine.py` — entry point, wires the pipeline together (this file is fine)
-- `log_parser.py` — reads `delivery_logs.txt`, turns lines into event dicts (this file is fine)
-- `queue_state.py` — processes events and maintains per-webhook delivery state
-- `report_generator.py` — computes metrics and writes output files
+4. **Round Aggregation** — Scheduled jobs are grouped by round. Each pool's final summary reflects only the most recent round snapshot (the current allocation state). Queue diversity is tracked across all rounds.
 
-The input log (`delivery_logs.txt`) records 8 webhooks going through their delivery lifecycle: enqueue, attempt, success/failure, retry scheduling, and dead-letter routing. The log is correct — don't modify it.
+5. **Report Generation** — Output files are written with job assignments and pool statistics. A digest hash verifies end-to-end integrity.
 
-## What's broken
+## Problem
+The scheduler runs without errors but produces incorrect output:
 
-Several metrics in the output are wrong:
+- **Jobs are being rejected incorrectly** — 11 jobs targeting pool_network are rejected as invalid when they should be accepted. The pool appears to be missing from the valid set.
 
-- **Attempt counting is inflated** — total_attempts shows way more than the actual delivery attempts in the log. Something is counting events that aren't real delivery attempts.
+- **Too few scheduling rounds** — The scheduler produces only 3 rounds when more should be needed. The concurrency limit per round appears too high.
 
-- **Delivery rate is wrong** — the rate should reflect what fraction of webhooks eventually got delivered successfully (a queue-level metric), but it's showing something much lower that looks like a per-attempt probability.
+- **Pool job counts are inflated** — Per-pool `job_count` values are much higher than expected for a single scheduling round. The aggregation seems to be combining data from multiple rounds.
 
-- **Mean latency is too high** — mean_latency_ms should only reflect the response time of webhooks that actually made it through. Instead it seems to be averaging in the durations of failed deliveries from endpoints that never came back online.
+- **Schedule digest is wrong** — The integrity hash doesn't match expected values because it depends on all the above metrics being correct.
 
-- **Fingerprint is unstable** — the queue_fingerprint changes between runs. The hash computation depends on data that's wrong due to the other bugs, plus the iteration order may not be deterministic.
+## Expected Correct Output
 
-## Output file format
+### `/app/runtime/output/schedule.json`
+Should contain 54 scheduled jobs (0 rejected) across 7 scheduling rounds, with at most 8 jobs per round.
 
-The replayer produces two files in `/app/runtime/`:
+### `/app/runtime/output/pool_report.json`
+Should show 4 pools, 54 scheduled, 0 rejected, and pool job counts reflecting only the final scheduling round (small counts of 1-2 per pool).
 
-**`webhook_status.jsonl`** — one JSON record per line (sorted by webhook_id), each with:
-- `webhook_id` (string): webhook identifier
-- `endpoint` (string): target URL
-- `event` (string): event type that triggered this webhook
-- `status` (string): "delivered", "dead_letter", or "pending"
-- `attempts` (int): number of delivery attempts made
-- `max_retries` (int): configured retry limit
-- `delivered_at` (int or null): timestamp of successful delivery
-- `failure_reasons` (array of strings): reasons for each failed attempt
-- `total_duration_ms` (int): cumulative HTTP response time across all attempts
+## Output Schema
 
-**`delivery_report.json`** — summary statistics:
-- `total_webhooks` (int): number of webhooks processed
-- `delivered` (int): webhooks that succeeded
-- `dead_lettered` (int): webhooks that exhausted retries
-- `pending` (int): webhooks still awaiting delivery
-- `delivery_rate` (float): fraction of webhooks delivered successfully
-- `mean_latency_ms` (int): average response time for delivered webhooks
-- `total_attempts` (int): total delivery attempts made
-- `queue_fingerprint` (string): 16-char hex hash for integrity verification
+### `/app/runtime/output/schedule.json`
+| Field | Type | Description |
+|-------|------|-------------|
+| `total_scheduled` | int | Total number of jobs assigned to rounds |
+| `total_rejected` | int | Jobs rejected due to invalid pool |
+| `total_rounds` | int | Number of scheduling rounds produced |
+| `assignments` | array | List of job assignment objects |
+| `assignments[].job_id` | string | Job identifier |
+| `assignments[].queue_name` | string | Source queue for the job |
+| `assignments[].priority` | int | Job priority (higher = more urgent) |
+| `assignments[].resource_pool` | string | Target resource pool |
+| `assignments[].round` | int | Assigned scheduling round number |
+| `rejected` | array | List of rejected job objects |
+| `rejected[].job_id` | string | Job identifier |
+| `rejected[].queue_name` | string | Source queue |
+| `rejected[].resource_pool` | string | Invalid pool that caused rejection |
+| `rejected[].reason` | string | Rejection reason |
 
-## How to run
+### `/app/runtime/output/pool_report.json`
+| Field | Type | Description |
+|-------|------|-------------|
+| `total_pools` | int | Number of resource pools in report |
+| `total_scheduled` | int | Total jobs scheduled |
+| `total_rejected` | int | Total jobs rejected |
+| `schedule_digest` | string | 16-char hex integrity hash |
+| `pools` | array | Per-pool summary objects (sorted by pool_id) |
+| `pools[].pool_id` | string | Resource pool identifier |
+| `pools[].job_count` | int | Jobs assigned to this pool in the most recent round |
+| `pools[].avg_cpu` | float | Average CPU units per job in the most recent round |
+| `pools[].avg_memory_mb` | float | Average memory per job in the most recent round |
+| `pools[].avg_runtime_sec` | float | Average estimated runtime per job in the most recent round |
+| `pools[].queue_diversity` | int | Number of distinct source queues across all rounds |
 
+## Key Files
+| File | Purpose |
+|------|---------|
+| `/app/runtime/run_scheduler.py` | Entry point — orchestrates loading, scheduling, aggregation, and output (correct) |
+| `/app/runtime/job_loader.py` | Reads queue CSVs into unified stream (correct) |
+| `/app/runtime/priority_scheduler.py` | Pool filtering, concurrency loading, and priority-based round assignment |
+| `/app/runtime/round_aggregator.py` | Round grouping and per-pool summary computation |
+| `/app/runtime/report_writer.py` | Output file generation and digest computation (correct) |
+| `/app/runtime/scheduler.ini` | Configuration with pool lists and concurrency parameters |
+| `/app/runtime/queue_batch.csv` | Batch analytics job manifests |
+| `/app/runtime/queue_realtime.csv` | Realtime ingest job manifests |
+| `/app/runtime/queue_maintenance.csv` | System maintenance job manifests |
+
+## Your Task
+Identify and fix the defects in `/app/runtime/priority_scheduler.py` and `/app/runtime/round_aggregator.py`. The entry point, job loader, report writer, configuration file, and queue data files are all correct and should not be modified.
+
+After fixing the bugs, re-run the scheduler:
 ```bash
-python3 /app/runtime/replay_engine.py
+python3 -m runtime.run_scheduler
 ```
 
-This regenerates `webhook_status.jsonl` and `delivery_report.json` in `/app/runtime/`.
-
-## What we need
-
-Fix the bugs in `queue_state.py` and `report_generator.py` so the output metrics are correct. The entry point and log parser are fine — the issues are in how state gets tracked and how the report gets computed.
-
-The fingerprint is particularly tricky because it depends on the delivery_rate being correct first — so you need to fix the upstream bugs before the fingerprint will match.
-
-Python 3 standard library is available system-wide. No external packages needed.
+The output files in `/app/runtime/output/` should then match the expected values described above.
