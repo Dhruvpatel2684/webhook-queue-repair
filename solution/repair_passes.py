@@ -44,14 +44,13 @@ def patch_dependency_resolver():
 
 def patch_phase_aggregator():
     """Apply fixes to phase_aggregator.py:
-    - Fix A: strip whitespace from category names (implicit via correct filtering upstream)
     - Fix C: use last-write-wins instead of accumulation for phase summaries
     """
     filepath = "/app/runtime/phase_aggregator.py"
     with open(filepath, "r") as f:
         content = f.read()
 
-    # Fix C: change accumulation (+= ) to last-write-wins (= ) for count and cost
+    # Fix C: change accumulation to last-write-wins for count and cost
     content = content.replace(
         "category_summaries[cat][\"total_passes\"] += metrics[\"count\"]",
         "category_summaries[cat][\"total_passes\"] = metrics[\"count\"]"
@@ -59,10 +58,6 @@ def patch_phase_aggregator():
     content = content.replace(
         "category_summaries[cat][\"total_cost_ms\"] += metrics[\"cost\"]",
         "category_summaries[cat][\"total_cost_ms\"] = metrics[\"cost\"]"
-    )
-    content = content.replace(
-        "category_summaries[cat][\"phases_active\"] += 1",
-        "category_summaries[cat][\"phases_active\"] += 1  # phases_active still counts"
     )
 
     with open(filepath, "w") as f:
