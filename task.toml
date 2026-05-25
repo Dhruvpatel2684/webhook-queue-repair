@@ -1,0 +1,13 @@
+author_name = "Dhruvkumar Patel"
+author_email = "dhruvpatel2284@gmail.com"
+category = "networking"
+difficulty = "hard"
+tags = ["webhooks", "retry-queue", "delivery-pipeline", "state-machine", "debugging"]
+difficulty_explanation = "Requires understanding webhook delivery lifecycle and tracing data flow across queue_state.py and report_generator.py. Four bugs interact: inflated attempt counting affects delivery_rate, which feeds into the queue fingerprint hash. Mean latency bug requires understanding which webhooks should be included. The fingerprint test acts as an all-or-nothing gate requiring all upstream fixes to be correct simultaneously."
+solution_explanation = "The oracle re-implements the replay pipeline with corrected logic: removes pre-increment of total_attempts in _handle_enqueue, fixes delivery_rate to use delivered/total_webhooks formula, fixes mean_latency to only average delivered webhook durations, and sorts webhook iteration for deterministic fingerprint computation."
+verification_explanation = "14 tests in 4 difficulty tiers: basic structure (7 tests pass with buggy code), medium (2 tests require fixing attempt counting), hard (2 tests require fixing rate/latency formulas), and hardest (3 tests require all bugs fixed for fingerprint and sorted output). Reward requires all 14 tests to pass."
+expert_time_estimate_hours = 2.0
+
+[task]
+name = "webhook-queue-repair"
+description = "Debug a broken webhook delivery log replayer that produces incorrect queue state reports due to interacting bugs in attempt counting, delivery rate computation, and latency averaging across the state tracker and report generator modules."
