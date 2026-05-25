@@ -1,41 +1,37 @@
-[task]
-name = "wal-replay-repair"
 author_name = "Dhruvkumar Patel"
 author_email = "dhruvpatel2284@gmail.com"
 category = "database_engineering"
+difficulty = "hard"
 tags = ["wal-replay", "crash-recovery", "transaction-log", "page-reconstruction", "debugging"]
+
+difficulty_explanation = "Five interacting bugs across 3 files: string-based LSN comparison that fails at digit-length boundaries, page write ordering by txn_id instead of LSN, applying before_image instead of after_image during redo, wrong config section for recovery mode causing aborted transactions to replay, and off-by-one checkpoint boundary including already-durable records. Misleading comments in the code make incorrect behavior appear intentional."
+solution_explanation = "Fix int() cast for LSN comparison, change sort key from txn_id to int(lsn), swap before_image to after_image, read recovery_mode from recovery.active section, change >= to > for checkpoint boundary."
+verification_explanation = "15 tests across 4 tiers: 7 structural tests pass with buggy code, 3 need transaction tracking fixes (Bugs 1+4), 3 need page reconstruction fixes (Bugs 2+3+5), 2 need all 5 bugs fixed for correct digest and combined assertions."
+expert_time_estimate_hours = 4.0
+
+[task]
+name = "wal-replay-repair"
+description = "Debug a WAL replay engine that produces incorrect crash recovery output due to interacting bugs in LSN comparison, write ordering, image selection, recovery mode configuration, and checkpoint boundary calculation."
 
 [task.difficulty]
 level = "hard"
-expert_time_estimate_hours = 4.0
-num_bugs = 5
-description = "WAL replay engine with 5 interacting bugs across transaction tracking, page reconstruction, and checkpoint boundary handling"
+reasoning = "Requires understanding WAL replay semantics (redo vs undo), tracing data flow across transaction tracking and page reconstruction, identifying subtle type coercion and off-by-one issues, and recognizing that misleading code comments describe incorrect behavior."
 
 [task.runtime]
-dockerfile = "environment/Dockerfile"
-entry_point = "python3 -m runtime.run_recovery"
-working_dir = "/app"
+entrypoint = "python3 -m runtime.run_recovery"
+language = "python"
+dependencies = "stdlib-only"
 
 [task.validator]
-test_script = "tests/test.sh"
-test_file = "tests/test_recovery.py"
-total_tests = 15
-pass_threshold = 15
+command = "bash tests/test.sh"
+description = "Pytest suite validating recovered page state, transaction outcomes, and replay boundaries."
 
 [task.repair]
-solution_script = "solution/solve.sh"
-repair_module = "solution/repair_recovery.py"
-files_to_fix = [
-    "runtime/txn_tracker.py",
-    "runtime/page_reconstructor.py",
-    "runtime/checkpoint_handler.py",
-]
+command = "bash solution/solve.sh"
+description = "Patches txn_tracker.py, page_reconstructor.py, and checkpoint_handler.py then re-runs."
 
 [task.resources]
-instruction = "instruction.md"
-wal_segments = [
-    "environment/runtime/wal_segment_001.jsonl",
-    "environment/runtime/wal_segment_002.jsonl",
-    "environment/runtime/wal_segment_003.jsonl",
-]
-config = "environment/runtime/recovery.ini"
+timeout = 300
+cpu = 2
+memory = "2GB"
+disk = "1GB"
