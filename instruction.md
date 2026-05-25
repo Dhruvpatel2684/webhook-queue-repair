@@ -1,71 +1,96 @@
-# Webhook Delivery Queue — Replay Broken After Deploy
+# Geospatial Sensor Correlation Engine — Debugging Task
 
-## What happened
+## Overview
+A geospatial sensor correlation engine processes time-series readings from multiple sensor clusters, identifies cross-zone correlations (readings of the same type occurring close together in time across different zones), and produces summary reports with per-zone aggregation statistics.
 
-We run a webhook delivery service that retries failed HTTP callbacks with exponential backoff. We built a log replayer that processes delivery logs and produces a summary report of the queue state — how many delivered, how many dead-lettered, latency stats, etc.
+## System Environment
+- **Language**: Python 3.11
+- **Runtime**: `/app/runtime/` (source modules, configuration, sensor data, output)
+- **Global system-wide tooling**: `uv` and `pytest` are available
+- **No external packages required** — stdlib only
 
-Last Thursday someone pushed a "cleanup" that broke the reporting. The queue state tracking and the report generation are both producing wrong numbers now. We've been getting paged about incorrect SLA metrics and need this fixed ASAP.
+## Processing Stages
+1. **Data Loading** — Sensor CSV files (`sensors_north.csv`, `sensors_south.csv`, `sensors_east.csv`) are loaded and merged into a unified time-sorted reading stream. This stage is correct.
 
-## How it works
+2. **Configuration** — `engine.ini` provides zone filtering and correlation parameters. The `[correlation.tuned]` section contains production-calibrated thresholds that should be used for scoring.
 
-Four Python files in `/app/runtime/`:
+3. **Correlation Detection** — Readings of the same type from different zones within `max_time_gap` seconds are paired and scored. Correlation strength depends on temporal proximity and data quality. Results are sorted by strength descending, with ties broken by timestamp, then zone_id alphabetically.
 
-- `replay_engine.py` — entry point, wires the pipeline together (this file is fine)
-- `log_parser.py` — reads `delivery_logs.txt`, turns lines into event dicts (this file is fine)
-- `queue_state.py` — processes events and maintains per-webhook delivery state
-- `report_generator.py` — computes metrics and writes output files
+4. **Zone Aggregation** — Readings are partitioned into fixed-size time windows (120 seconds). Each zone's final summary reflects only the most recent window snapshot (the last observation period for that zone). Types seen are accumulated across all windows.
 
-The input log (`delivery_logs.txt`) records 8 webhooks going through their delivery lifecycle: enqueue, attempt, success/failure, retry scheduling, and dead-letter routing. The log is correct — don't modify it.
+5. **Report Generation** — Output files are written with correlation pairs and zone statistics. A digest hash verifies end-to-end integrity.
 
-## What's broken
+## Problem
+The engine runs without errors but produces incorrect output:
 
-Several metrics in the output are wrong:
+- **Zone count is wrong** — Only 3 zones appear in the summary when 4 should be present. One zone's readings are being silently dropped during filtering.
 
-- **Attempt counting is inflated** — total_attempts shows way more than the actual delivery attempts in the log. Something is counting events that aren't real delivery attempts.
+- **Correlation count is too low** — The engine finds only 12 correlation pairs when significantly more should exist. The scoring threshold appears to be too restrictive.
 
-- **Delivery rate is wrong** — the rate should reflect what fraction of webhooks eventually got delivered successfully (a queue-level metric), but it's showing something much lower that looks like a per-attempt probability.
+- **Zone reading counts are inflated** — Per-zone `reading_count` values are much higher than expected for a single observation window. The aggregation seems to be combining data from multiple time periods.
 
-- **Mean latency is too high** — mean_latency_ms should only reflect the response time of webhooks that actually made it through. Instead it seems to be averaging in the durations of failed deliveries from endpoints that never came back online.
+- **Report digest is wrong** — The integrity hash doesn't match expected values because it depends on all the above metrics being correct.
 
-- **Fingerprint is unstable** — the queue_fingerprint changes between runs. The hash computation depends on data that's wrong due to the other bugs, plus the iteration order may not be deterministic.
+## Expected Correct Output
 
-## Output file format
+### `/app/runtime/output/correlations.json`
+Should contain 33 correlation pairs across all 4 active zones (zone_alpha, zone_beta, zone_gamma, zone_delta), with the strongest correlation at 93.5 strength.
 
-The replayer produces two files in `/app/runtime/`:
+### `/app/runtime/output/zone_summary.json`
+Should show 4 zones, 54 total readings processed, 33 total correlations, and zone reading counts reflecting only the final time window (small counts of 1-2 per zone).
 
-**`webhook_status.jsonl`** — one JSON record per line (sorted by webhook_id), each with:
-- `webhook_id` (string): webhook identifier
-- `endpoint` (string): target URL
-- `event` (string): event type that triggered this webhook
-- `status` (string): "delivered", "dead_letter", or "pending"
-- `attempts` (int): number of delivery attempts made
-- `max_retries` (int): configured retry limit
-- `delivered_at` (int or null): timestamp of successful delivery
-- `failure_reasons` (array of strings): reasons for each failed attempt
-- `total_duration_ms` (int): cumulative HTTP response time across all attempts
+## Output Schema
 
-**`delivery_report.json`** — summary statistics:
-- `total_webhooks` (int): number of webhooks processed
-- `delivered` (int): webhooks that succeeded
-- `dead_lettered` (int): webhooks that exhausted retries
-- `pending` (int): webhooks still awaiting delivery
-- `delivery_rate` (float): fraction of webhooks delivered successfully
-- `mean_latency_ms` (int): average response time for delivered webhooks
-- `total_attempts` (int): total delivery attempts made
-- `queue_fingerprint` (string): 16-char hex hash for integrity verification
+### `/app/runtime/output/correlations.json`
+| Field | Type | Description |
+|-------|------|-------------|
+| `correlation_count` | int | Total number of correlation pairs found |
+| `pairs` | array | List of correlation pair objects |
+| `pairs[].reading_type` | string | The shared reading type (temperature, humidity, pressure) |
+| `pairs[].zone_a` | string | First zone in the pair (alphabetically first by zone_id when timestamps equal) |
+| `pairs[].zone_b` | string | Second zone in the pair |
+| `pairs[].sensor_a` | string | Sensor ID from zone_a |
+| `pairs[].sensor_b` | string | Sensor ID from zone_b |
+| `pairs[].timestamp_a` | int | Timestamp of reading from zone_a |
+| `pairs[].timestamp_b` | int | Timestamp of reading from zone_b |
+| `pairs[].time_delta` | int | Absolute time difference in seconds |
+| `pairs[].strength` | float | Correlation strength score |
+| `pairs[].source_a` | string | Source cluster name for zone_a reading |
+| `pairs[].source_b` | string | Source cluster name for zone_b reading |
 
-## How to run
+### `/app/runtime/output/zone_summary.json`
+| Field | Type | Description |
+|-------|------|-------------|
+| `total_zones` | int | Number of zones in summary |
+| `total_readings_processed` | int | Total sensor readings loaded |
+| `total_correlations` | int | Number of correlation pairs found |
+| `report_digest` | string | 16-char hex integrity hash |
+| `zones` | array | Per-zone summary objects (sorted by zone_id) |
+| `zones[].zone_id` | string | Zone identifier |
+| `zones[].reading_count` | int | Readings in the most recent window for this zone |
+| `zones[].mean_value` | float | Average reading value in the most recent window |
+| `zones[].mean_quality` | float | Average quality score in the most recent window |
+| `zones[].distinct_types` | int | Number of distinct reading types observed across all windows |
 
+## Key Files
+| File | Purpose |
+|------|---------|
+| `/app/runtime/run_correlation.py` | Entry point — orchestrates loading, correlation, aggregation, and output (correct) |
+| `/app/runtime/data_loader.py` | Reads sensor CSVs into unified stream (correct) |
+| `/app/runtime/correlation_engine.py` | Zone filtering, threshold loading, and cross-zone correlation detection |
+| `/app/runtime/zone_aggregator.py` | Time-window partitioning and per-zone summary computation |
+| `/app/runtime/report_writer.py` | Output file generation and digest computation (correct) |
+| `/app/runtime/engine.ini` | Configuration with zone lists and threshold parameters |
+| `/app/runtime/sensors_north.csv` | Sensor data from north cluster |
+| `/app/runtime/sensors_south.csv` | Sensor data from south cluster |
+| `/app/runtime/sensors_east.csv` | Sensor data from east cluster |
+
+## Your Task
+Identify and fix the defects in `/app/runtime/correlation_engine.py` and `/app/runtime/zone_aggregator.py`. The entry point, data loader, report writer, configuration file, and sensor data files are all correct and should not be modified.
+
+After fixing the bugs, re-run the engine:
 ```bash
-python3 /app/runtime/replay_engine.py
+python3 -m runtime.run_correlation
 ```
 
-This regenerates `webhook_status.jsonl` and `delivery_report.json` in `/app/runtime/`.
-
-## What we need
-
-Fix the bugs in `queue_state.py` and `report_generator.py` so the output metrics are correct. The entry point and log parser are fine — the issues are in how state gets tracked and how the report gets computed.
-
-The fingerprint is particularly tricky because it depends on the delivery_rate being correct first — so you need to fix the upstream bugs before the fingerprint will match.
-
-Python 3 standard library is available system-wide. No external packages needed.
+The output files in `/app/runtime/output/` should then match the expected values described above.
