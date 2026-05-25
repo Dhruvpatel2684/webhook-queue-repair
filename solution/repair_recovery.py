@@ -40,7 +40,7 @@ def main():
         [
             (
                 'mode = self.config.get("recovery", "recovery_mode")',
-                'mode = self.config.get("recovery.active", "recovery_mode")',
+                'mode = self.config.get("recovery.redo", "recovery_mode")',
             ),
         ],
     )
@@ -56,13 +56,16 @@ def main():
         ],
     )
 
-    # Bug 3: Fix before_image -> after_image in page_reconstructor.py
+    # Bug 3: Fix page state - must overwrite on each write (last write wins)
     fix_file(
         os.path.join(runtime_dir, "page_reconstructor.py"),
         [
             (
-                'self.page_state[record["page_id"]] = record["before_image"]',
-                'self.page_state[record["page_id"]] = record["after_image"]',
+                '            # Preserve earliest write to each page as the base state\n'
+                '            if page_id not in self.page_state:\n'
+                '                self.page_state[page_id] = record["after_image"]',
+                '            # Apply write - last write to each page wins\n'
+                '            self.page_state[page_id] = record["after_image"]',
             ),
         ],
     )

@@ -22,12 +22,13 @@ class PageReconstructor:
                 page_writes.append(record)
 
         # Order writes by originating transaction for consistent replay
-        page_writes.sort(key=lambda w: (w["page_id"], w["txn_id"]))
+        page_writes.sort(key=lambda w: (w["page_id"], int(w["lsn"])))
 
         # Apply each write to reconstruct final page state
         for record in page_writes:
-            # Restore page to pre-operation state for undo recovery
-            self.page_state[record["page_id"]] = record["before_image"]
+            page_id = record["page_id"]
+            # Apply write - last write to each page wins
+            self.page_state[page_id] = record["after_image"]
             self.replayed_count += 1
 
     def get_page_state(self):
