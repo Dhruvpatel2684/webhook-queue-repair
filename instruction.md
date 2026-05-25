@@ -30,19 +30,50 @@ The `passes.ini` configuration file controls scheduler behavior:
 
 ## Scheduling Rules
 
-1. Passes are loaded from all three CSV manifests
+1. Passes are loaded from all three CSV manifests into a unified stream
 2. Only passes whose category appears in `active_categories` are scheduled; others are rejected
-3. Passes with dependency chain depth exceeding `max_chain_depth` are blocked
+3. Passes with dependency chain depth exceeding `max_chain_depth` are blocked (depth exactly equal to the limit is still schedulable)
 4. Remaining passes are sorted by priority (descending), then submitted_order (ascending), then ties at equal priority and submission order are broken by originating module name alphabetically
-5. Passes are assigned to phases respecting dependency ordering and phase capacity limits
-6. Each category's final summary reflects the most recent phase snapshot, not accumulated totals
+5. Passes are assigned to phases respecting dependency ordering and the production-tuned phase capacity limit from `[passes.optimized]`
+6. Each category's final summary in the report reflects the most recent phase snapshot only (pass count and cost from the last phase where that category appeared), not accumulated totals across all phases
+7. The `phases_active` field counts how many distinct phases contained passes of that category
 
 ## Output
 
 The scheduler produces two files in `/app/output/`:
 
-- `schedule.json` - Contains phase assignments, rejected passes, and blocked passes
-- `report.json` - Contains per-category summaries and overall statistics
+### `/app/output/schedule.json`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `total_phases` | int | Number of scheduling phases produced |
+| `total_scheduled` | int | Count of passes successfully assigned to phases |
+| `total_rejected` | int | Count of passes rejected due to invalid category |
+| `total_blocked` | int | Count of passes blocked due to dependency chain depth |
+| `assignments` | array | List of scheduled pass assignment objects |
+| `assignments[].pass_id` | string | Pass identifier |
+| `assignments[].module_name` | string | Originating module name |
+| `assignments[].category` | string | Pass category (transform, analysis, lowering, cleanup) |
+| `assignments[].priority` | int | Pass priority (higher = scheduled earlier) |
+| `assignments[].phase` | int | Assigned phase number |
+| `assignments[].position` | int | Position within the phase |
+| `assignments[].estimated_cost_ms` | int | Estimated execution cost in milliseconds |
+| `rejected_passes` | array | List of pass_id strings that were rejected |
+| `blocked_passes` | array | List of pass_id strings that were blocked |
+
+### `/app/output/report.json`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `category_summaries` | array | Per-category metric summaries (sorted alphabetically) |
+| `category_summaries[].category` | string | Category name |
+| `category_summaries[].total_passes` | int | Pass count in the most recent phase for this category |
+| `category_summaries[].total_cost_ms` | int | Total cost in the most recent phase for this category |
+| `category_summaries[].phases_active` | int | Number of phases where this category had passes |
+| `statistics` | object | Overall scheduling statistics |
+| `statistics.total_passes_processed` | int | Sum of scheduled + rejected + blocked passes |
+| `statistics.total_phases` | int | Number of scheduling phases |
+| `statistics.scheduling_complete` | bool | Whether scheduling finished successfully |
 
 ## Running
 
