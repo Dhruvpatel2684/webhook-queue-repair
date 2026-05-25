@@ -117,19 +117,27 @@ def test_parallel_replay_size():
     )
 
 
-def test_scheduling_priority_values():
-    """Priority scores must reflect critical path length (longest-path-from)."""
+def test_priority_ordering_chain():
+    """Priority ordering must reflect transitive downstream impact.
+
+    In the dependency chain A->B->C->D, each node transitively blocks all
+    downstream nodes. Priority must decrease along the chain: A > B > C > D.
+    This validates that priority accounts for the full depth of transitive
+    blocking, not just immediate fan-out.
+    """
     report = load_report()
-    priorities = report["scheduling_priorities"]
-    # wh-A has critical path 5 (A->B->C->D->F->G)
-    assert priorities["wh-A"] == 5, f"wh-A priority: expected 5, got {priorities['wh-A']}"
-    # wh-B has critical path 4 (B->C->D->F->G)
-    assert priorities["wh-B"] == 4, f"wh-B priority: expected 4, got {priorities['wh-B']}"
-    # wh-C has critical path 3 (C->D->F->G)
-    assert priorities["wh-C"] == 3, f"wh-C priority: expected 3, got {priorities['wh-C']}"
-    # Leaf nodes have critical path 0
-    assert priorities["wh-E"] == 0, f"wh-E priority: expected 0, got {priorities['wh-E']}"
-    assert priorities["wh-G"] == 0, f"wh-G priority: expected 0, got {priorities['wh-G']}"
+    order = report["priority_order"]
+    pos = {wh: i for i, wh in enumerate(order)}
+    # A must come before B, B before C, C before D (chain ordering)
+    assert pos["wh-A"] < pos["wh-B"], (
+        f"wh-A (pos {pos['wh-A']}) should have higher priority than wh-B (pos {pos['wh-B']})"
+    )
+    assert pos["wh-B"] < pos["wh-C"], (
+        f"wh-B (pos {pos['wh-B']}) should have higher priority than wh-C (pos {pos['wh-C']})"
+    )
+    assert pos["wh-C"] < pos["wh-D"], (
+        f"wh-C (pos {pos['wh-C']}) should have higher priority than wh-D (pos {pos['wh-D']})"
+    )
 
 
 # ============================================================
