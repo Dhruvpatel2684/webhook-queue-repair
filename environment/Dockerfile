@@ -1,7 +1,7 @@
 FROM python:3.11-slim
 
+RUN pip install uv
+
+COPY runtime/ /app/runtime/
+
 WORKDIR /app
-
-COPY runtime/ /app/
-
-CMD ["python3", "run_gc.py"]
