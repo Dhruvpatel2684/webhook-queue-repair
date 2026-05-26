@@ -1,71 +1,72 @@
-# Webhook Delivery Queue — Replay Broken After Deploy
+# MVCC Garbage Collector Repair
 
-## What happened
+## System Overview
 
-We run a webhook delivery service that retries failed HTTP callbacks with exponential backoff. We built a log replayer that processes delivery logs and produces a summary report of the queue state — how many delivered, how many dead-lettered, latency stats, etc.
+You are debugging an MVCC (Multi-Version Concurrency Control) garbage collector for a versioned key-value store. The system maintains multiple versions of each key and must determine which old versions are safe to reclaim without breaking active transactions.
 
-Last Thursday someone pushed a "cleanup" that broke the reporting. The queue state tracking and the report generation are both producing wrong numbers now. We've been getting paged about incorrect SLA metrics and need this fixed ASAP.
+The garbage collection pipeline operates in stages:
 
-## How it works
+1. **Version Store** loads committed version records from `versions_committed.jsonl`
+2. **Snapshot Tracker** loads active transaction data and computes the GC watermark
+3. **Visibility Checker** determines which versions are candidates for collection
+4. **GC Planner** creates an execution plan with space reclamation estimates
+5. **GC Reporter** assembles the final output report
 
-Four Python files in `/app/runtime/`:
+## File Layout
 
-- `replay_engine.py` — entry point, wires the pipeline together (this file is fine)
-- `log_parser.py` — reads `delivery_logs.txt`, turns lines into event dicts (this file is fine)
-- `queue_state.py` — processes events and maintains per-webhook delivery state
-- `report_generator.py` — computes metrics and writes output files
+All source files are located at absolute paths under `/app/`:
 
-The input log (`delivery_logs.txt`) records 8 webhooks going through their delivery lifecycle: enqueue, attempt, success/failure, retry scheduling, and dead-letter routing. The log is correct — don't modify it.
+| File | Path | Purpose |
+|------|------|---------|
+| Entry point | `/app/run_gc.py` | Orchestrates the GC pipeline |
+| Version store | `/app/version_store.py` | Loads and indexes version data |
+| Snapshot tracker | `/app/snapshot_tracker.py` | Tracks active transaction snapshots |
+| Visibility checker | `/app/visibility_checker.py` | Determines version GC eligibility |
+| GC planner | `/app/gc_planner.py` | Plans collection batches and estimates savings |
+| GC reporter | `/app/gc_reporter.py` | Generates structured output report |
+| Configuration | `/app/gc_config.ini` | GC parameters (multiple sections) |
+| Version data | `/app/versions_committed.jsonl` | Committed version records |
+| Transaction data | `/app/active_transactions.json` | Active transaction snapshots |
 
-## What's broken
+## Output Schema
 
-Several metrics in the output are wrong:
+The pipeline writes `/app/gc_output.json` with this structure:
 
-- **Attempt counting is inflated** — total_attempts shows way more than the actual delivery attempts in the log. Something is counting events that aren't real delivery attempts.
+| Section | Field | Type | Description |
+|---------|-------|------|-------------|
+| `state` | `total_keys` | int | Number of distinct keys in store |
+| `state` | `total_versions` | int | Total version records loaded |
+| `state` | `active_transactions` | int | Number of active transactions |
+| `state` | `watermark` | int | Computed GC watermark timestamp |
+| `gc_plan` | `total_reclaimable_versions` | int | Count of versions to collect |
+| `gc_plan` | `estimated_space_savings_bytes` | int | Estimated bytes to reclaim |
+| `gc_plan` | `batches` | list | Execution batch details |
+| `gc_plan` | `keys_affected` | list | Keys with reclaimable versions |
+| `gc_plan` | `bytes_per_version_used` | int | Bytes estimate used per version |
+| `gc_candidates` | `total_candidate_versions` | int | Actual candidate version count |
+| `gc_candidates` | `by_key` | dict | Per-key candidate breakdown |
+| `digest` | - | str | SHA-256 integrity hash of plan |
 
-- **Delivery rate is wrong** — the rate should reflect what fraction of webhooks eventually got delivered successfully (a queue-level metric), but it's showing something much lower that looks like a per-attempt probability.
+## Observed Symptoms
 
-- **Mean latency is too high** — mean_latency_ms should only reflect the response time of webhooks that actually made it through. Instead it seems to be averaging in the durations of failed deliveries from endpoints that never came back online.
+The garbage collector produces incorrect results in several ways:
 
-- **Fingerprint is unstable** — the queue_fingerprint changes between runs. The hash computation depends on data that's wrong due to the other bugs, plus the iteration order may not be deterministic.
+1. **Incorrect watermark computation** - The GC watermark does not account for all transactions that may still be reading old versions. Some transactions that hold snapshots are being ignored when determining the safe collection boundary, causing versions that are still needed to be marked for collection.
 
-## Output file format
+2. **Boundary condition error in eligibility check** - Versions at the exact watermark boundary are being incorrectly treated as eligible for collection. The watermark represents a timestamp where at least one transaction may still be reading, so versions at that exact boundary must be protected.
 
-The replayer produces two files in `/app/runtime/`:
+3. **Version chain ordering defect** - The version chain for each key is not ordered correctly, which causes the wrong version to be treated as the "current" (most recent) version. This results in the oldest version being skipped during candidate analysis rather than being considered for collection.
 
-**`webhook_status.jsonl`** — one JSON record per line (sorted by webhook_id), each with:
-- `webhook_id` (string): webhook identifier
-- `endpoint` (string): target URL
-- `event` (string): event type that triggered this webhook
-- `status` (string): "delivered", "dead_letter", or "pending"
-- `attempts` (int): number of delivery attempts made
-- `max_retries` (int): configured retry limit
-- `delivered_at` (int or null): timestamp of successful delivery
-- `failure_reasons` (array of strings): reasons for each failed attempt
-- `total_duration_ms` (int): cumulative HTTP response time across all attempts
+4. **Inflated space savings estimate** - The estimated space reclamation uses an incorrect parameter value. The configuration file contains both theoretical and measured values from production profiling, and the wrong set of parameters is being used for the estimate.
 
-**`delivery_report.json`** — summary statistics:
-- `total_webhooks` (int): number of webhooks processed
-- `delivered` (int): webhooks that succeeded
-- `dead_lettered` (int): webhooks that exhausted retries
-- `pending` (int): webhooks still awaiting delivery
-- `delivery_rate` (float): fraction of webhooks delivered successfully
-- `mean_latency_ms` (int): average response time for delivered webhooks
-- `total_attempts` (int): total delivery attempts made
-- `queue_fingerprint` (string): 16-char hex hash for integrity verification
+5. **Undercounted reclaimable versions** - The count of total reclaimable versions is incorrect. The counting logic determines the number of keys that have reclaimable versions rather than the actual total number of individual versions to be collected.
 
-## How to run
+## MVCC Invariants
 
-```bash
-python3 /app/runtime/replay_engine.py
-```
+For reference, the core MVCC garbage collection rules are:
 
-This regenerates `webhook_status.jsonl` and `delivery_report.json` in `/app/runtime/`.
-
-## What we need
-
-Fix the bugs in `queue_state.py` and `report_generator.py` so the output metrics are correct. The entry point and log parser are fine — the issues are in how state gets tracked and how the report gets computed.
-
-The fingerprint is particularly tricky because it depends on the delivery_rate being correct first — so you need to fix the upstream bugs before the fingerprint will match.
-
-Python 3 standard library is available system-wide. No external packages needed.
+- A version V of key K is safe to GC if there exists a newer version of K AND no active transaction can still observe V as the current version of K
+- The GC watermark represents the minimum snapshot timestamp below which old (superseded) versions are invisible to all active readers
+- All transactions that might still issue reads must be considered when computing the watermark
+- The watermark boundary itself must be treated as potentially visible (conservative approach)
+- Version chains must be ordered newest-first so that chain[0] is always the current version

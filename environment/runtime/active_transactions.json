@@ -1,0 +1,14 @@
+{
+  "transactions": [
+    {"txn_id": "txn-101", "snapshot_ts": 200, "status": "committed", "started_at": "2024-01-15T10:00:00Z"},
+    {"txn_id": "txn-102", "snapshot_ts": 150, "status": "active", "started_at": "2024-01-15T09:55:00Z"},
+    {"txn_id": "txn-103", "snapshot_ts": 300, "status": "committed", "started_at": "2024-01-15T10:05:00Z"},
+    {"txn_id": "txn-104", "snapshot_ts": 180, "status": "active", "started_at": "2024-01-15T09:58:00Z"},
+    {"txn_id": "txn-105", "snapshot_ts": 250, "status": "committed", "started_at": "2024-01-15T10:02:00Z"}
+  ],
+  "metadata": {
+    "cluster_id": "mvcc-cluster-01",
+    "epoch": 47,
+    "last_checkpoint_ts": 145
+  }
+}
