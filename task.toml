@@ -11,3 +11,26 @@ expert_time_estimate_hours = 1.5
 [task]
 name = "regex-engine-repair"
 description = "Debug a broken regex pattern matching engine that produces incorrect match results due to interacting bugs in category filtering, backtrack limiting, count accumulation, and result ordering across the loader, evaluator, and main modules."
+
+[task.difficulty]
+level = "hard"
+reasoning = "Four interacting bugs across three modules require understanding NFA evaluation semantics, configuration parsing, data accumulation patterns, and sort stability. Bugs are not flagged with comments and require tracing data flow to identify."
+
+[task.runtime]
+entrypoint = "python3 -m runtime.run_matcher"
+language = "python"
+dependencies = "stdlib-only"
+
+[task.validator]
+command = "bash tests/test.sh"
+description = "Runs the regex engine to produce output, then validates correctness with pytest covering structure, category coverage, match counts, backtrack bounds, and sort ordering."
+
+[task.repair]
+command = "bash solution/solve.sh"
+description = "Applies four patches to fix category parsing whitespace, config section reference, count accumulation, and sort key, then re-runs the engine."
+
+[task.resources]
+timeout = 300
+cpu = 2
+memory = "2GB"
+disk = "1GB"
