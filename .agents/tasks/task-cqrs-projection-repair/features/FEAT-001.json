@@ -2,7 +2,7 @@
   "id": "FEAT-001",
   "type": "feat",
   "description": "Create the complete CQRS projection repair Harbor challenge, replacing all existing files in the repo. This includes 5 intentional subtle bugs across a 600+ line Python codebase, 12 graduated tests, event stream data files, configuration, Docker setup, instruction.md, task.toml, and solution scripts.",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "Remove all existing files (environment/, tests/, solution/, instruction.md, task.toml, .gitignore) and recreate directory structure for the new challenge",
     "Create environment/Dockerfile with python:3.11-slim base, uv install, COPY runtime/ to /app/runtime/, WORKDIR /app",
@@ -44,5 +44,5 @@
     "Run: grep 'COPY.*test\\|COPY.*solution' /projects/sandbox/webhook-queue-repair/environment/Dockerfile to verify no test/solution copy"
   ],
   "blocked_reason": null,
-  "findings": ""
+  "findings": "Redesigned window processing order so dedup runs before windowing (load -> dedup -> window -> project), enabling Bug A off-by-one to manifest as double-counting. Used overlap=0 in config so correct behavior has no overlap but buggy behavior creates unintended overlap at boundary. All 5 bugs independently affect different output values. Removed all hint comments from buggy code - bugs are now purely logic errors with subtle docstring contradictions. Solution repair_projection.py uses string replacement on the exact buggy lines."
 }
