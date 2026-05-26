@@ -20,6 +20,9 @@ import os
 import sys
 from pathlib import Path
 
+# Ensure sibling modules are importable
+sys.path.insert(0, str(Path(__file__).parent))
+
 from version_store import VersionStore
 from snapshot_tracker import SnapshotTracker
 from visibility_checker import VisibilityChecker
