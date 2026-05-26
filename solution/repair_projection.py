@@ -63,11 +63,24 @@ def fix_event_parser_timezone():
     with open(filepath, "r") as f:
         content = f.read()
 
-    # Positive timezone offset means local is ahead of UTC, so subtract
-    content = content.replace(
-        "utc_ts = local_ts + timedelta(hours=offset_h, minutes=offset_m)",
-        "utc_ts = local_ts - timedelta(hours=offset_h, minutes=offset_m)"
+    # Both timezone conversion directions are inverted:
+    # +offset means local is ahead of UTC -> subtract to get UTC
+    # -offset means local is behind UTC -> add to get UTC
+    old_block = (
+        '        # Convert local time to UTC by applying the timezone offset\n'
+        '        if sign == "+":\n'
+        '            utc_ts = local_ts + timedelta(hours=offset_h, minutes=offset_m)\n'
+        '        else:\n'
+        '            utc_ts = local_ts - timedelta(hours=offset_h, minutes=offset_m)'
     )
+    new_block = (
+        '        # Convert local time to UTC by applying the timezone offset\n'
+        '        if sign == "+":\n'
+        '            utc_ts = local_ts - timedelta(hours=offset_h, minutes=offset_m)\n'
+        '        else:\n'
+        '            utc_ts = local_ts + timedelta(hours=offset_h, minutes=offset_m)'
+    )
+    content = content.replace(old_block, new_block)
 
     with open(filepath, "w") as f:
         f.write(content)
