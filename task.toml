@@ -1,8 +1,36 @@
-[task]
 author_name = "Dhruvkumar Patel"
 author_email = "dhruvpatel2284@gmail.com"
 category = "event_sourcing"
-name = "cqrs-projection-repair"
 difficulty = "hard"
 tags = ["cqrs", "event-sourcing", "projections", "materialized-views", "debugging"]
+difficulty_explanation = "Five interacting bugs across five modules require tracing data flow through event parsing, deduplication, windowing, and projection aggregation. Bugs involve off-by-one boundaries, hash key selection, merge strategy dispatch, timezone arithmetic, and priority comparison semantics."
+solution_explanation = "The repair script fixes: (1) off-by-one in window boundary calculation, (2) wrong field in dedup hash key (timestamp->version), (3) last_write merge handler incorrectly doing max instead of assignment, (4) timezone offset applied in wrong direction, (5) inverted priority comparison."
+verification_explanation = "12 tests in 3 difficulty tiers: easy (4 tests pass with buggy code), medium (4 tests require 1-2 fixes), hard (4 tests require 3-5 bugs fixed). Reward requires all 12 tests to pass."
+expert_time_estimate_hours = 3.0
+
+[task]
+name = "cqrs-projection-repair"
+description = "Debug a CQRS event projection system with five interacting bugs in event parsing, deduplication, window processing, projection aggregation, and conflict resolution that produce incorrect materialized views."
+
+[task.difficulty]
+level = "hard"
+reasoning = "Five subtle bugs across five modules requiring understanding of CQRS event processing semantics, timezone arithmetic, hash-based deduplication, sliding window boundaries, and priority-based conflict resolution. No hint comments in code."
+
+[task.runtime]
+entrypoint = "python3 -m runtime.run_projection"
+language = "python"
+dependencies = "stdlib-only"
+
+[task.validator]
+command = "bash tests/test.sh"
+description = "Runs the projection engine then validates output correctness with pytest checking exact computed values across 12 graduated tests."
+
+[task.repair]
+command = "bash solution/solve.sh"
+description = "Applies five patches fixing window boundary, dedup key, merge dispatch, timezone direction, and priority comparison, then re-runs the engine."
+
+[task.resources]
 timeout = 300
+cpu = 2
+memory = "2GB"
+disk = "1GB"

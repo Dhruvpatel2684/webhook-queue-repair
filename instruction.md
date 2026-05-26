@@ -87,9 +87,9 @@ The system runs without crashing but produces incorrect output:
 - Certain view keys contain values from unexpected sources
 - Aggregate totals do not reconcile with the raw event data
 
-## Global Tooling
+## Global System-Wide Tooling
 
-The following tools are available in the environment:
+The following global system-wide tools are available in the environment:
 
 - `python3` (3.11)
 - `uv` (for installing and running additional Python packages)
