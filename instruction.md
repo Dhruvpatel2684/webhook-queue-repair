@@ -1,114 +1,112 @@
-# Regex Engine Pattern Matcher - Debugging Task
+# CQRS Event Projection System Repair
 
 ## Overview
 
-You are given a regex pattern matching engine that reads pattern definitions from
-text files, compiles them into NFA (Nondeterministic Finite Automaton) state machines,
-evaluates each pattern against a set of test inputs, and writes structured JSON output.
+You are given a CQRS (Command Query Responsibility Segregation) event projection system that reads event streams from JSONL files, processes them through a series of stages, and builds materialized views as JSON output files.
 
-The system is currently producing incorrect results. Your task is to identify and fix
-the bugs so that all tests pass.
+The system is currently producing incorrect results. Your task is to identify and fix the bugs causing the projection output to be inaccurate.
 
 ## System Architecture
 
-Global system-wide tooling is provided via Python 3.11 with the `uv` package manager
-for running tests. The matching engine consists of four main modules:
+The projection system consists of several cooperating modules:
 
-### Modules
+- **Event Loading**: Reads events from multiple JSONL stream files in `/app/runtime/data/streams/`
+- **Window Processing**: Segments events into overlapping sliding windows based on sequence numbers
+- **Deduplication**: Removes duplicate events using hash-based identification
+- **Projection Building**: Applies configured rules to aggregate event data into materialized views
+- **Output Writing**: Produces JSON files with the computed projections and processing metadata
 
-1. **Loader** (`/app/runtime/loader.py`): Reads pattern definitions from data files
-   in `/app/runtime/data/` and filters them by the enabled categories listed in the
-   configuration file.
+## Configuration
 
-2. **Compiler** (`/app/runtime/compiler.py`): Compiles regex pattern strings into NFA
-   representations using Thompson's construction. Each compiled pattern contains a list
-   of states with labeled transitions.
+The system is configured through two files:
 
-3. **Evaluator** (`/app/runtime/evaluator.py`): Runs compiled NFAs against test input
-   strings. Uses a backtrack-limited simulation to prevent excessive computation on
-   complex patterns. Processes patterns in configurable batch sizes.
+- `/app/runtime/config/engine.ini` - Processing parameters (window size, overlap, dedup settings)
+- `/app/runtime/config/projections.yaml` - Projection rules defining how events map to views
 
-4. **Entry Point** (`/app/runtime/run_matcher.py`): Orchestrates the full flow from
-   loading through evaluation, sorts results, and writes output JSON files.
+## Input Format
 
-### Configuration
+Each event stream is a JSONL file where each line is a JSON object with:
+- `stream_id`: Identifier for the event stream
+- `seq`: Sequence number (integer, monotonically increasing within a stream)
+- `timestamp`: ISO 8601 timestamp with timezone offset
+- `version`: Event schema version (integer)
+- `event_type`: The type of domain event
+- `payload`: Dictionary containing event-specific data fields
 
-The configuration file at `/app/runtime/config.ini` contains:
+## Output Schema
 
-- `[matcher]` section: general matcher settings including enabled categories
-- `[matcher.limits]` section: execution limits including backtrack ceiling and batch size
-- `[output]` section: output format preferences
+The system produces two files in `/app/runtime/output/`:
 
-### Data Files
+### projections.json
 
-Pattern definitions live in `/app/runtime/data/` as text files. Each line follows
-the format:
-
+A JSON object where keys are `"view_key:field_name"` and values contain:
+```json
+{
+  "view_key": "string",
+  "field": "string",
+  "value": 0.0,
+  "merge_mode": "sum|max|last_write|min|count",
+  "priority": 0,
+  "source_stream": "string",
+  "source_event_type": "string",
+  "last_updated_seq": 0,
+  "update_count": 0
+}
 ```
-name|priority|category|regex|test_input1;test_input2;...
+
+### metadata.json
+
+Processing statistics:
+```json
+{
+  "total_events_loaded": 0,
+  "events_after_dedup": 0,
+  "windows_processed": 0,
+  "projections_created": 0,
+  "streams_processed": [],
+  "errors": []
+}
 ```
 
-Three category files are provided:
-- `/app/runtime/data/patterns_core.txt` (20 patterns, category: core)
-- `/app/runtime/data/patterns_extended.txt` (20 patterns, category: extended)
-- `/app/runtime/data/patterns_unicode.txt` (18 patterns, category: unicode)
+## Running the System
 
-## Running the Engine
-
-From the `/app` working directory:
-
+Execute the projection system:
 ```bash
-python3 -m runtime.run_matcher
+python3 -m runtime.run_projection
 ```
 
-This produces two output files in `/app/runtime/output/`:
+This must be run from the `/app` directory.
 
-### Output: `/app/runtime/output/match_results.json`
+## Observed Symptoms
 
-An array of result objects, sorted by priority (ascending), then category
-(alphabetical), then pattern name (alphabetical). Each object contains:
+The system runs without crashing but produces incorrect output:
 
-```json
-{
-  "pattern_name": "string - name of the pattern",
-  "category": "string - category the pattern belongs to",
-  "priority": "integer - priority level (1-10)",
-  "input_text": "string - the test input that was evaluated",
-  "matched": "boolean - whether the pattern matched this input",
-  "match_span": "[start, end] or null - character positions of the match",
-  "match_count": "integer - total matches across all inputs for this pattern"
-}
-```
+- Projections contain incorrect aggregated values that do not match what would be expected from the source events
+- Some events appear to be missing or duplicated in the final projections
+- Ordering inconsistencies in the output suggest temporal processing issues
+- Certain view keys contain values from unexpected sources
+- Aggregate totals do not reconcile with the raw event data
 
-### Output: `/app/runtime/output/summary.json`
+## Global Tooling
 
-A summary object containing:
+The following tools are available in the environment:
 
-```json
-{
-  "total_patterns": "integer - number of pattern definitions loaded",
-  "total_evaluated": "integer - number of individual evaluations performed",
-  "categories_processed": ["list of category strings that were processed"],
-  "match_rate": "float - ratio of matched evaluations to total",
-  "patterns_by_category": {"category": "count of unique patterns per category"}
-}
-```
+- `python3` (3.11)
+- `uv` (for installing and running additional Python packages)
+- Standard Unix utilities
 
-## Expected Behavior
+## Debugging Guidance
 
-When working correctly, the engine should:
+- Trace the event processing lifecycle from source files through to output
+- Verify data integrity at each stage of the processing workflow
+- Compare intermediate results against source data to isolate where values diverge
+- Pay attention to how events flow between processing stages
+- Consider edge cases in how events are grouped, identified, and aggregated
+- Check that configuration is being interpreted correctly by the processing logic
 
-1. Load patterns from all three category files (core, extended, unicode)
-2. Apply the backtrack limit from the `[matcher.limits]` configuration section
-3. Report accurate match counts (each pattern's count equals how many of its test
-   inputs actually match)
-4. Sort output deterministically by priority, then category, then pattern name
+## Constraints
 
-## Debugging Tips
-
-- Check how configuration values are parsed and which sections they come from
-- Trace the data flow from loading through evaluation to output
-- Verify that category filtering correctly includes all expected categories
-- Examine how results are accumulated across processing passes
-- Confirm the sort key produces stable, deterministic ordering when patterns from
-  different categories share the same priority value
+- All source code is in `/app/runtime/`
+- Do not modify configuration files or input data
+- The fix should address the root causes in the processing logic
+- After fixing, re-run the system to regenerate output

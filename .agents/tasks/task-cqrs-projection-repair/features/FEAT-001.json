@@ -1,0 +1,48 @@
+{
+  "id": "FEAT-001",
+  "type": "feat",
+  "description": "Create the complete CQRS projection repair Harbor challenge, replacing all existing files in the repo. This includes 5 intentional subtle bugs across a 600+ line Python codebase, 12 graduated tests, event stream data files, configuration, Docker setup, instruction.md, task.toml, and solution scripts.",
+  "status": "in_progress",
+  "steps": [
+    "Remove all existing files (environment/, tests/, solution/, instruction.md, task.toml, .gitignore) and recreate directory structure for the new challenge",
+    "Create environment/Dockerfile with python:3.11-slim base, uv install, COPY runtime/ to /app/runtime/, WORKDIR /app",
+    "Create environment/runtime/__init__.py (empty)",
+    "Create environment/runtime/models.py (~60 lines) with dataclasses: Event(stream_id, seq, timestamp, version, event_type, payload), Projection(view_key, field, value, merge_mode, priority, source_stream), WindowConfig(size, overlap)",
+    "Create environment/runtime/event_parser.py (~100+ lines) with: custom ISO timestamp parser that has Bug D (adds timezone offset instead of subtracting for UTC conversion), event loading from JSONL files, elaborate validation logic as red herring",
+    "Create environment/runtime/window_processor.py (~120+ lines) with: sliding window logic that has Bug A (off-by-one using seq_start + window_size instead of seq_start + window_size - 1 for window_end boundary), complex retry/logging as red herrings",
+    "Create environment/runtime/dedup_engine.py (~80+ lines) with: hash-based deduplication that has Bug B (uses stream_id:seq:timestamp instead of stream_id:seq:version as dedup key), elaborate cache management as red herring",
+    "Create environment/runtime/projection_engine.py (~150+ lines) with: projection aggregation with Bug C (last_write handler does max() instead of direct assignment) and Bug E (priority comparison inverted, uses < instead of >), complex validation/logging as red herrings",
+    "Create environment/runtime/run_projection.py (~80+ lines) as entry point that orchestrates: load config, parse events from all streams, process windows, deduplicate, run projections, write output JSON",
+    "Create environment/runtime/config/engine.ini with window_size=10, overlap=2, dedup_enabled=true, output_dir=/app/runtime/output",
+    "Create environment/runtime/config/projections.yaml with complex projection rules mapping events to materialized views with various merge modes (sum, max, last_write) and priorities",
+    "Create 5 JSONL event stream files in environment/runtime/data/streams/ (orders.jsonl, payments.jsonl, inventory.jsonl, shipments.jsonl, returns.jsonl) with ~80 total events, including: events with non-zero timezone offsets (for Bug D), events with same stream_id+seq+timestamp but different versions (for Bug B), events where newer values are lower than older for last_write fields (for Bug C), events that fall on window boundaries (for Bug A), events that target same view keys with different priorities (for Bug E). Add a comment in the data about 'reprocessed events' as the only subtle hint for Bug B",
+    "Create tests/test.sh that runs the projection engine then pytest with uv run --with pytest --with pyyaml",
+    "Create tests/test_projection.py with 12 tests: 4 easy (pass with bugs), 4 medium (need 1-2 fixes), 4 hard (need 3-5 fixes). Tests must check EXACT computed values",
+    "Create solution/solve.sh that runs python3 /solution/repair_projection.py then re-runs the engine",
+    "Create solution/repair_projection.py that patches all 5 bugs in-place using file read/write operations",
+    "Create instruction.md describing the system at HIGH level without pointing to specific files for bugs, documenting output schema precisely, describing symptoms generically",
+    "Create task.toml with correct metadata (author, category, difficulty, tags, timeout)",
+    "Create .gitignore for Python/output files",
+    "Verify the complete file structure exists and all files have appropriate content and line counts"
+  ],
+  "acceptance_criteria": [
+    "All old files are removed and replaced with new CQRS challenge files",
+    "Total Python code across runtime modules is 600+ lines",
+    "5 bugs are present: off-by-one window boundary, wrong dedup key field, last_write doing max, timezone +/- inverted, priority comparison inverted",
+    "12 tests exist with proper graduation (4 easy always pass, 4 medium need 1-2 fixes, 4 hard need 3-5 fixes)",
+    "solution/repair_projection.py correctly fixes all 5 bugs",
+    "instruction.md gives NO specific hints about bug locations or types",
+    "No BUG/FIXME/TODO comments exist in source code",
+    "The word 'pipeline' does not appear anywhere",
+    "Dockerfile does not COPY tests or solution directories",
+    "Red herring code (logging, retry, validation) is present to distract from bugs"
+  ],
+  "verification": [
+    "Run: find /projects/sandbox/webhook-queue-repair -name '*.py' | xargs wc -l to verify 600+ lines total",
+    "Run: grep -r 'BUG\\|FIXME\\|TODO' /projects/sandbox/webhook-queue-repair/environment/ to verify no hint comments",
+    "Run: grep -r 'pipeline' /projects/sandbox/webhook-queue-repair/ to verify word not used",
+    "Run: grep 'COPY.*test\\|COPY.*solution' /projects/sandbox/webhook-queue-repair/environment/Dockerfile to verify no test/solution copy"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}

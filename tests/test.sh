@@ -1,10 +1,10 @@
 #!/bin/bash
 set -e
 cd /app
-python3 -m runtime.run_matcher
+python3 -m runtime.run_projection
 mkdir -p /logs/verifier
 set +e
-uv run --with pytest pytest /tests/test_matcher.py -v 2>&1 | tee /logs/verifier/output.log
+uv run --with pytest --with pyyaml pytest /tests/test_projection.py -v 2>&1 | tee /logs/verifier/output.log
 TEST_EXIT=${PIPESTATUS[0]}
 set -e
 if [ $TEST_EXIT -eq 0 ]; then echo "1" > /logs/verifier/reward.txt; else echo "0" > /logs/verifier/reward.txt; fi
