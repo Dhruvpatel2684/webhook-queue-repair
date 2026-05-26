@@ -1,71 +1,73 @@
-# Webhook Delivery Queue — Replay Broken After Deploy
+# Packet Fragment Reassembly -- Debugging Task
 
-## What happened
+## Overview
+A network packet fragment reassembly engine processes captured fragments from multiple data streams, groups them into logical flows, validates integrity, and reconstructs complete packets.
 
-We run a webhook delivery service that retries failed HTTP callbacks with exponential backoff. We built a log replayer that processes delivery logs and produces a summary report of the queue state — how many delivered, how many dead-lettered, latency stats, etc.
+## System Environment
+- **Language**: Python 3.11
+- **Runtime**: `/app/runtime/` (source modules, configuration, capture files, output)
+- **Global system-wide tooling**: `uv` and `pytest` are available
+- **No external packages required** -- stdlib only
 
-Last Thursday someone pushed a "cleanup" that broke the reporting. The queue state tracking and the report generation are both producing wrong numbers now. We've been getting paged about incorrect SLA metrics and need this fixed ASAP.
+## Key Files
+| File | Purpose |
+|------|---------|
+| `/app/runtime/run_reassembly.py` | Entry point (correct) |
+| `/app/runtime/capture_loader.py` | Loads capture JSONL files (correct) |
+| `/app/runtime/flow_grouper.py` | Groups fragments into logical flows |
+| `/app/runtime/fragment_sorter.py` | Orders fragments within each flow |
+| `/app/runtime/checksum_validator.py` | Validates fragment integrity |
+| `/app/runtime/reassembler.py` | Reassembles packets from ordered fragments |
+| `/app/runtime/report_writer.py` | Writes output JSON files (correct) |
+| `/app/runtime/reassembly.ini` | Reassembly configuration parameters |
 
-## How it works
+## What's Wrong
 
-Four Python files in `/app/runtime/`:
+The engine runs without errors but produces incorrect output:
 
-- `replay_engine.py` — entry point, wires the pipeline together (this file is fine)
-- `log_parser.py` — reads `delivery_logs.txt`, turns lines into event dicts (this file is fine)
-- `queue_state.py` — processes events and maintains per-webhook delivery state
-- `report_generator.py` — computes metrics and writes output files
+- **Some flows have fragments in wrong order** -- for flows with many fragments, the ordering appears garbled in the middle. Shorter flows seem fine.
 
-The input log (`delivery_logs.txt`) records 8 webhooks going through their delivery lifecycle: enqueue, attempt, success/failure, retry scheduling, and dead-letter routing. The log is correct — don't modify it.
+- **Checksum validation is rejecting valid fragments** -- fragments that should pass integrity checks are being flagged as corrupted when their payload data is correct.
 
-## What's broken
+- **Retransmitted fragments not handled correctly** -- when a fragment is retransmitted (same position, newer data), the reconstructed packet shows stale data from the original transmission.
 
-Several metrics in the output are wrong:
+- **Flow boundaries are wrong** -- some fragments that belong to separate logical flows are being grouped together, inflating per-flow fragment counts.
 
-- **Attempt counting is inflated** — total_attempts shows way more than the actual delivery attempts in the log. Something is counting events that aren't real delivery attempts.
+- **Completeness detection is unreliable** -- some flows are marked as complete when they shouldn't be, and the total reassembled byte count seems inflated.
 
-- **Delivery rate is wrong** — the rate should reflect what fraction of webhooks eventually got delivered successfully (a queue-level metric), but it's showing something much lower that looks like a per-attempt probability.
+## Output Schema
 
-- **Mean latency is too high** — mean_latency_ms should only reflect the response time of webhooks that actually made it through. Instead it seems to be averaging in the durations of failed deliveries from endpoints that never came back online.
+### `/app/runtime/output/reassembly_state.json`
+| Field | Type | Description |
+|-------|------|-------------|
+| `flows` | object | Map of flow_id to reassembled flow data |
+| `flows.<flow_id>.fragments_count` | int | Number of fragments in this flow |
+| `flows.<flow_id>.reassembled_bytes` | int | Total bytes in reassembled packet |
+| `flows.<flow_id>.status` | string | "complete", "incomplete", or "corrupted" |
+| `flows.<flow_id>.payload_preview` | string | First 32 chars of reassembled payload |
+| `total_flows` | int | Number of distinct flows |
+| `total_fragments_processed` | int | Total fragments across all flows |
+| `checksum_failures` | int | Fragments that failed integrity check |
+| `state_digest` | string | 16-char hex integrity hash |
 
-- **Fingerprint is unstable** — the queue_fingerprint changes between runs. The hash computation depends on data that's wrong due to the other bugs, plus the iteration order may not be deterministic.
+### `/app/runtime/output/reassembly_report.json`
+| Field | Type | Description |
+|-------|------|-------------|
+| `complete_flows` | int | Flows successfully reassembled |
+| `incomplete_flows` | int | Flows missing fragments |
+| `corrupted_flows` | int | Flows with checksum failures |
+| `retransmission_count` | int | Detected retransmitted fragments |
+| `total_bytes_reassembled` | int | Sum of reassembled bytes across all flows |
+| `flow_details` | array | Per-flow summary objects |
+| `flow_details[].flow_id` | string | Flow identifier |
+| `flow_details[].fragment_count` | int | Fragments in this flow |
+| `flow_details[].status` | string | Flow completion status |
+| `flow_details[].checksum_ok` | bool | Whether all fragments passed checksum |
 
-## Output file format
+## Your Task
+Identify and fix the defects in the reassembly logic. The entry point, capture loader, report writer, configuration, and capture files are all correct and should not be modified.
 
-The replayer produces two files in `/app/runtime/`:
-
-**`webhook_status.jsonl`** — one JSON record per line (sorted by webhook_id), each with:
-- `webhook_id` (string): webhook identifier
-- `endpoint` (string): target URL
-- `event` (string): event type that triggered this webhook
-- `status` (string): "delivered", "dead_letter", or "pending"
-- `attempts` (int): number of delivery attempts made
-- `max_retries` (int): configured retry limit
-- `delivered_at` (int or null): timestamp of successful delivery
-- `failure_reasons` (array of strings): reasons for each failed attempt
-- `total_duration_ms` (int): cumulative HTTP response time across all attempts
-
-**`delivery_report.json`** — summary statistics:
-- `total_webhooks` (int): number of webhooks processed
-- `delivered` (int): webhooks that succeeded
-- `dead_lettered` (int): webhooks that exhausted retries
-- `pending` (int): webhooks still awaiting delivery
-- `delivery_rate` (float): fraction of webhooks delivered successfully
-- `mean_latency_ms` (int): average response time for delivered webhooks
-- `total_attempts` (int): total delivery attempts made
-- `queue_fingerprint` (string): 16-char hex hash for integrity verification
-
-## How to run
-
+After fixing, re-run:
 ```bash
-python3 /app/runtime/replay_engine.py
+python3 -m runtime.run_reassembly
 ```
-
-This regenerates `webhook_status.jsonl` and `delivery_report.json` in `/app/runtime/`.
-
-## What we need
-
-Fix the bugs in `queue_state.py` and `report_generator.py` so the output metrics are correct. The entry point and log parser are fine — the issues are in how state gets tracked and how the report gets computed.
-
-The fingerprint is particularly tricky because it depends on the delivery_rate being correct first — so you need to fix the upstream bugs before the fingerprint will match.
-
-Python 3 standard library is available system-wide. No external packages needed.
