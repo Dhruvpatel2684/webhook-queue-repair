@@ -1,71 +1,114 @@
-# Webhook Delivery Queue — Replay Broken After Deploy
+# Regex Engine Pattern Matcher - Debugging Task
 
-## What happened
+## Overview
 
-We run a webhook delivery service that retries failed HTTP callbacks with exponential backoff. We built a log replayer that processes delivery logs and produces a summary report of the queue state — how many delivered, how many dead-lettered, latency stats, etc.
+You are given a regex pattern matching engine that reads pattern definitions from
+text files, compiles them into NFA (Nondeterministic Finite Automaton) state machines,
+evaluates each pattern against a set of test inputs, and writes structured JSON output.
 
-Last Thursday someone pushed a "cleanup" that broke the reporting. The queue state tracking and the report generation are both producing wrong numbers now. We've been getting paged about incorrect SLA metrics and need this fixed ASAP.
+The system is currently producing incorrect results. Your task is to identify and fix
+the bugs so that all tests pass.
 
-## How it works
+## System Architecture
 
-Four Python files in `/app/runtime/`:
+Global system-wide tooling is provided via Python 3.11 with the `uv` package manager
+for running tests. The matching engine consists of four main modules:
 
-- `replay_engine.py` — entry point, wires the pipeline together (this file is fine)
-- `log_parser.py` — reads `delivery_logs.txt`, turns lines into event dicts (this file is fine)
-- `queue_state.py` — processes events and maintains per-webhook delivery state
-- `report_generator.py` — computes metrics and writes output files
+### Modules
 
-The input log (`delivery_logs.txt`) records 8 webhooks going through their delivery lifecycle: enqueue, attempt, success/failure, retry scheduling, and dead-letter routing. The log is correct — don't modify it.
+1. **Loader** (`/app/runtime/loader.py`): Reads pattern definitions from data files
+   in `/app/runtime/data/` and filters them by the enabled categories listed in the
+   configuration file.
 
-## What's broken
+2. **Compiler** (`/app/runtime/compiler.py`): Compiles regex pattern strings into NFA
+   representations using Thompson's construction. Each compiled pattern contains a list
+   of states with labeled transitions.
 
-Several metrics in the output are wrong:
+3. **Evaluator** (`/app/runtime/evaluator.py`): Runs compiled NFAs against test input
+   strings. Uses a backtrack-limited simulation to prevent excessive computation on
+   complex patterns. Processes patterns in configurable batch sizes.
 
-- **Attempt counting is inflated** — total_attempts shows way more than the actual delivery attempts in the log. Something is counting events that aren't real delivery attempts.
+4. **Entry Point** (`/app/runtime/run_matcher.py`): Orchestrates the full flow from
+   loading through evaluation, sorts results, and writes output JSON files.
 
-- **Delivery rate is wrong** — the rate should reflect what fraction of webhooks eventually got delivered successfully (a queue-level metric), but it's showing something much lower that looks like a per-attempt probability.
+### Configuration
 
-- **Mean latency is too high** — mean_latency_ms should only reflect the response time of webhooks that actually made it through. Instead it seems to be averaging in the durations of failed deliveries from endpoints that never came back online.
+The configuration file at `/app/runtime/config.ini` contains:
 
-- **Fingerprint is unstable** — the queue_fingerprint changes between runs. The hash computation depends on data that's wrong due to the other bugs, plus the iteration order may not be deterministic.
+- `[matcher]` section: general matcher settings including enabled categories
+- `[matcher.limits]` section: execution limits including backtrack ceiling and batch size
+- `[output]` section: output format preferences
 
-## Output file format
+### Data Files
 
-The replayer produces two files in `/app/runtime/`:
+Pattern definitions live in `/app/runtime/data/` as text files. Each line follows
+the format:
 
-**`webhook_status.jsonl`** — one JSON record per line (sorted by webhook_id), each with:
-- `webhook_id` (string): webhook identifier
-- `endpoint` (string): target URL
-- `event` (string): event type that triggered this webhook
-- `status` (string): "delivered", "dead_letter", or "pending"
-- `attempts` (int): number of delivery attempts made
-- `max_retries` (int): configured retry limit
-- `delivered_at` (int or null): timestamp of successful delivery
-- `failure_reasons` (array of strings): reasons for each failed attempt
-- `total_duration_ms` (int): cumulative HTTP response time across all attempts
-
-**`delivery_report.json`** — summary statistics:
-- `total_webhooks` (int): number of webhooks processed
-- `delivered` (int): webhooks that succeeded
-- `dead_lettered` (int): webhooks that exhausted retries
-- `pending` (int): webhooks still awaiting delivery
-- `delivery_rate` (float): fraction of webhooks delivered successfully
-- `mean_latency_ms` (int): average response time for delivered webhooks
-- `total_attempts` (int): total delivery attempts made
-- `queue_fingerprint` (string): 16-char hex hash for integrity verification
-
-## How to run
-
-```bash
-python3 /app/runtime/replay_engine.py
+```
+name|priority|category|regex|test_input1;test_input2;...
 ```
 
-This regenerates `webhook_status.jsonl` and `delivery_report.json` in `/app/runtime/`.
+Three category files are provided:
+- `/app/runtime/data/patterns_core.txt` (20 patterns, category: core)
+- `/app/runtime/data/patterns_extended.txt` (20 patterns, category: extended)
+- `/app/runtime/data/patterns_unicode.txt` (18 patterns, category: unicode)
 
-## What we need
+## Running the Engine
 
-Fix the bugs in `queue_state.py` and `report_generator.py` so the output metrics are correct. The entry point and log parser are fine — the issues are in how state gets tracked and how the report gets computed.
+From the `/app` working directory:
 
-The fingerprint is particularly tricky because it depends on the delivery_rate being correct first — so you need to fix the upstream bugs before the fingerprint will match.
+```bash
+python3 -m runtime.run_matcher
+```
 
-Python 3 standard library is available system-wide. No external packages needed.
+This produces two output files in `/app/runtime/output/`:
+
+### Output: `/app/runtime/output/match_results.json`
+
+An array of result objects, sorted by priority (ascending), then category
+(alphabetical), then pattern name (alphabetical). Each object contains:
+
+```json
+{
+  "pattern_name": "string - name of the pattern",
+  "category": "string - category the pattern belongs to",
+  "priority": "integer - priority level (1-10)",
+  "input_text": "string - the test input that was evaluated",
+  "matched": "boolean - whether the pattern matched this input",
+  "match_span": "[start, end] or null - character positions of the match",
+  "match_count": "integer - total matches across all inputs for this pattern"
+}
+```
+
+### Output: `/app/runtime/output/summary.json`
+
+A summary object containing:
+
+```json
+{
+  "total_patterns": "integer - number of pattern definitions loaded",
+  "total_evaluated": "integer - number of individual evaluations performed",
+  "categories_processed": ["list of category strings that were processed"],
+  "match_rate": "float - ratio of matched evaluations to total",
+  "patterns_by_category": {"category": "count of unique patterns per category"}
+}
+```
+
+## Expected Behavior
+
+When working correctly, the engine should:
+
+1. Load patterns from all three category files (core, extended, unicode)
+2. Apply the backtrack limit from the `[matcher.limits]` configuration section
+3. Report accurate match counts (each pattern's count equals how many of its test
+   inputs actually match)
+4. Sort output deterministically by priority, then category, then pattern name
+
+## Debugging Tips
+
+- Check how configuration values are parsed and which sections they come from
+- Trace the data flow from loading through evaluation to output
+- Verify that category filtering correctly includes all expected categories
+- Examine how results are accumulated across processing passes
+- Confirm the sort key produces stable, deterministic ordering when patterns from
+  different categories share the same priority value
