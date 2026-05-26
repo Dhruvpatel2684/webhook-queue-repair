@@ -71,7 +71,7 @@ def parse_iso_timestamp(ts_string: str) -> float:
         if sign == "+":
             utc_ts = local_ts + timedelta(hours=offset_h, minutes=offset_m)
         else:
-            utc_ts = local_ts + timedelta(hours=offset_h, minutes=offset_m)
+            utc_ts = local_ts - timedelta(hours=offset_h, minutes=offset_m)
     else:
         # Z suffix means already UTC
         utc_ts = local_ts
