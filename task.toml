@@ -1,13 +1,36 @@
 author_name = "Dhruvkumar Patel"
 author_email = "dhruvpatel2284@gmail.com"
-category = "networking"
+category = "pattern_matching"
 difficulty = "hard"
-tags = ["webhooks", "retry-queue", "delivery-pipeline", "state-machine", "debugging"]
-difficulty_explanation = "Requires understanding webhook delivery lifecycle and tracing data flow across queue_state.py and report_generator.py. Four bugs interact: inflated attempt counting affects delivery_rate, which feeds into the queue fingerprint hash. Mean latency bug requires understanding which webhooks should be included. The fingerprint test acts as an all-or-nothing gate requiring all upstream fixes to be correct simultaneously."
-solution_explanation = "The oracle re-implements the replay pipeline with corrected logic: removes pre-increment of total_attempts in _handle_enqueue, fixes delivery_rate to use delivered/total_webhooks formula, fixes mean_latency to only average delivered webhook durations, and sorts webhook iteration for deterministic fingerprint computation."
-verification_explanation = "14 tests in 4 difficulty tiers: basic structure (7 tests pass with buggy code), medium (2 tests require fixing attempt counting), hard (2 tests require fixing rate/latency formulas), and hardest (3 tests require all bugs fixed for fingerprint and sorted output). Reward requires all 14 tests to pass."
-expert_time_estimate_hours = 2.0
+tags = ["regex", "nfa", "pattern-matching", "compiler", "debugging"]
+difficulty_explanation = "Requires understanding regex compilation, NFA evaluation, and tracing data flow across loader, compiler, and evaluator modules. Four bugs interact: category filtering affects pattern loading, backtrack limits affect match accuracy, count accumulation inflates results, and sort order affects determinism."
+solution_explanation = "The repair script fixes: (1) strip whitespace in category parsing, (2) read backtrack limit from correct config section, (3) use assignment instead of accumulation for match counts, (4) add category to sort key for deterministic ordering."
+verification_explanation = "10 tests in 3 difficulty tiers: easy (4 tests pass with buggy code), medium (3 tests require 1-2 fixes), hard (3 tests require all 4 bugs fixed). Reward requires all 10 tests to pass."
+expert_time_estimate_hours = 1.5
 
 [task]
-name = "webhook-queue-repair"
-description = "Debug a broken webhook delivery log replayer that produces incorrect queue state reports due to interacting bugs in attempt counting, delivery rate computation, and latency averaging across the state tracker and report generator modules."
+name = "regex-engine-repair"
+description = "Debug a broken regex pattern matching engine that produces incorrect match results due to interacting bugs in category filtering, backtrack limiting, count accumulation, and result ordering across the loader, evaluator, and main modules."
+
+[task.difficulty]
+level = "hard"
+reasoning = "Four interacting bugs across three modules require understanding NFA evaluation semantics, configuration parsing, data accumulation patterns, and sort stability. Bugs are not flagged with comments and require tracing data flow to identify."
+
+[task.runtime]
+entrypoint = "python3 -m runtime.run_matcher"
+language = "python"
+dependencies = "stdlib-only"
+
+[task.validator]
+command = "bash tests/test.sh"
+description = "Runs the regex engine to produce output, then validates correctness with pytest covering structure, category coverage, match counts, backtrack bounds, and sort ordering."
+
+[task.repair]
+command = "bash solution/solve.sh"
+description = "Applies four patches to fix category parsing whitespace, config section reference, count accumulation, and sort key, then re-runs the engine."
+
+[task.resources]
+timeout = 300
+cpu = 2
+memory = "2GB"
+disk = "1GB"

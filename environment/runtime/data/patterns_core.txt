@@ -1,0 +1,22 @@
+# Core pattern definitions - basic literals and character classes
+# Format: name|priority|category|regex|test_input1;test_input2;...
+core_hello|1|core|hello|hello world;say hello;hellooo
+core_world|1|core|world|hello world;world class;worlds apart
+core_digit_class|2|core|[0-9]|abc123;no digits;42
+core_lower_range|2|core|[a-z]|hello;UPPER;123
+core_upper_range|2|core|[A-Z]|Hello;upper;ABC
+core_vowels|3|core|[aeiou]|hello;rhythm;sky
+core_consonants|3|core|[bcdfg]|abcdef;aeiou;bag
+core_dot_hat|4|core|h.t|hat;hot;hit
+core_dot_cat|4|core|c.t|cat;cot;cut
+core_dot_any|4|core|b.g|bag;big;bug
+core_literal_foo|5|core|foo|foobar;food;afoo
+core_literal_bar|5|core|bar|barcode;foobar;bazbar
+core_num_class|6|core|[123]|a1b;x4y;321
+core_hex_class|6|core|[0-9a-f]|cafe;BEAD;0x1f
+core_mixed|7|core|ab|abc;cab;dab
+core_two_char|7|core|xy|xyz;bxy;xxy
+core_end_lit|8|core|end|ending;friend;blend
+core_the_lit|8|core|the|other;them;bathe
+core_simple_or|9|core|a|apple;bcd;banana
+core_single_z|10|core|z|zero;buzz;fizz
