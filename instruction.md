@@ -4,7 +4,7 @@
 
 You are debugging an MVCC (Multi-Version Concurrency Control) garbage collector for a versioned key-value store. The system maintains multiple versions of each key and must determine which old versions are safe to reclaim without breaking active transactions.
 
-The garbage collection pipeline operates in stages:
+The garbage collection system operates in stages:
 
 1. **Version Store** loads committed version records from `versions_committed.jsonl`
 2. **Snapshot Tracker** loads active transaction data and computes the GC watermark
@@ -18,7 +18,7 @@ All source files are located at absolute paths under `/app/`:
 
 | File | Path | Purpose |
 |------|------|---------|
-| Entry point | `/app/run_gc.py` | Orchestrates the GC pipeline |
+| Entry point | `/app/run_gc.py` | Orchestrates the GC process |
 | Version store | `/app/version_store.py` | Loads and indexes version data |
 | Snapshot tracker | `/app/snapshot_tracker.py` | Tracks active transaction snapshots |
 | Visibility checker | `/app/visibility_checker.py` | Determines version GC eligibility |
@@ -30,7 +30,7 @@ All source files are located at absolute paths under `/app/`:
 
 ## Output Schema
 
-The pipeline writes `/app/gc_output.json` with this structure:
+The system writes `/app/gc_output.json` with this structure:
 
 | Section | Field | Type | Description |
 |---------|-------|------|-------------|
@@ -66,7 +66,7 @@ The garbage collector produces incorrect results in several ways:
 For reference, the core MVCC garbage collection rules are:
 
 - A version V of key K is safe to GC if there exists a newer version of K AND no active transaction can still observe V as the current version of K
-- The GC watermark represents the minimum snapshot timestamp below which old (superseded) versions are invisible to all active readers
+- The GC watermark represents the system-wide minimum snapshot timestamp below which old (superseded) versions are invisible to all active readers
 - All transactions that might still issue reads must be considered when computing the watermark
 - The watermark boundary itself must be treated as potentially visible (conservative approach)
 - Version chains must be ordered newest-first so that chain[0] is always the current version

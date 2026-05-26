@@ -1,20 +1,37 @@
-[task]
-name = "mvcc-gc-repair"
+author_name = "Dhruvkumar Patel"
+author_email = "dhruvpatel2284@gmail.com"
 category = "database_engineering"
 difficulty = "hard"
+tags = ["mvcc", "garbage-collection", "version-chains", "snapshot-isolation", "debugging"]
 
-[task.description]
-summary = "Debug an MVCC garbage collector that incorrectly identifies versions for collection"
-domain = "Multi-Version Concurrency Control garbage collection for a versioned key-value store"
+difficulty_explanation = "Five interacting bugs across 3 files requiring MVCC semantic understanding: watermark excludes active transactions, visibility uses wrong comparison operator, version chains sorted wrong direction, config section mismatch for size estimation, and len() on dict instead of summing values. Bugs interact because wrong watermark feeds into visibility checks which feed into GC candidate selection."
+solution_explanation = "Include active transactions in watermark computation, change <= to < for visibility boundary, sort chains descending by commit_ts, read bytes_per_version from gc.measured section, sum version list lengths instead of counting keys."
+verification_explanation = "15 tests: 7 structural pass with bugs, 3 need watermark and visibility fixed, 3 need chain ordering and counting fixed, 2 need all bugs fixed for correct digest."
+expert_time_estimate_hours = 4.0
 
-[docker]
-dockerfile = "environment/Dockerfile"
-context = "environment"
+[task]
+name = "mvcc-gc-repair"
+description = "Debug an MVCC garbage collector with interacting bugs in snapshot watermark computation, version visibility checking, chain ordering, space estimation, and candidate counting."
 
-[tests]
-script = "tests/test.sh"
-total = 15
-passing_with_bugs = 7
+[task.difficulty]
+level = "hard"
+reasoning = "Requires understanding MVCC semantics including snapshot isolation visibility rules, version chain traversal, and how watermark computation affects downstream GC decisions."
 
-[solution]
-script = "solution/solve.sh"
+[task.runtime]
+entrypoint = "python3 -m runtime.run_gc"
+language = "python"
+dependencies = "stdlib-only"
+
+[task.validator]
+command = "bash tests/test.sh"
+description = "Pytest suite validating GC plan correctness."
+
+[task.repair]
+command = "bash solution/solve.sh"
+description = "Patches snapshot_tracker.py, visibility_checker.py, and gc_planner.py then re-runs."
+
+[task.resources]
+timeout = 300
+cpu = 2
+memory = "2GB"
+disk = "1GB"

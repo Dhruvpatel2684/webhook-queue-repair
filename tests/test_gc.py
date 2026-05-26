@@ -1,7 +1,7 @@
 """
 Tests for the MVCC Garbage Collector.
 
-Validates that the GC pipeline correctly identifies version candidates
+Validates that the GC system correctly identifies version candidates
 for garbage collection based on MVCC visibility rules and active
 transaction snapshots.
 """
@@ -19,15 +19,15 @@ OUTPUT_FILE = os.path.join(RUNTIME_DIR, "gc_output.json")
 
 
 @pytest.fixture(scope="session", autouse=True)
-def run_gc_pipeline():
-    """Run the GC pipeline once before all tests."""
+def run_gc_process():
+    """Run the GC process once before all tests."""
     result = subprocess.run(
         ["python3", "run_gc.py"],
         cwd=RUNTIME_DIR,
         capture_output=True,
         text=True,
     )
-    assert result.returncode == 0, f"GC pipeline failed: {result.stderr}"
+    assert result.returncode == 0, f"GC process failed: {result.stderr}"
     yield
 
 
@@ -46,10 +46,10 @@ def gc_output():
 class TestStructure:
     """Basic structural validation of GC output."""
 
-    def test_output_file_exists(self, run_gc_pipeline):
+    def test_output_file_exists(self, run_gc_process):
         """Verify the GC output file was created."""
         assert os.path.exists(OUTPUT_FILE), (
-            "gc_output.json was not created by the pipeline"
+            "gc_output.json was not created by the process"
         )
 
     def test_state_has_required_fields(self, gc_output):

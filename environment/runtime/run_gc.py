@@ -2,11 +2,11 @@
 """
 MVCC Garbage Collector - Entry Point
 
-Orchestrates the garbage collection pipeline for a versioned key-value store.
+Orchestrates the garbage collection process for a versioned key-value store.
 The GC process identifies old versions that are no longer visible to any active
 transaction and produces a collection plan with space reclamation estimates.
 
-Pipeline stages:
+Processing stages:
   1. Load committed version data from the version store
   2. Load and analyze active transaction snapshots
   3. Compute the visibility watermark (safe GC boundary)
@@ -43,7 +43,7 @@ def validate_inputs(version_store, snapshot_tracker):
 
 
 def build_gc_context(version_store, snapshot_tracker):
-    """Assemble the context object passed through the pipeline."""
+    """Assemble the context object passed through the processing stages."""
     return {
         "total_keys": version_store.total_keys(),
         "total_versions": version_store.total_versions(),
@@ -54,8 +54,8 @@ def build_gc_context(version_store, snapshot_tracker):
     }
 
 
-def run_gc_pipeline():
-    """Execute the full GC pipeline and return the result."""
+def run_gc_process():
+    """Execute the full GC process and return the result."""
     # Stage 1: Load version data
     versions_path = resolve_runtime_path("versions_committed.jsonl")
     version_store = VersionStore(str(versions_path))
@@ -99,16 +99,16 @@ def run_gc_pipeline():
 def main():
     """Main entry point with error handling."""
     try:
-        result = run_gc_pipeline()
+        result = run_gc_process()
         if result.get("error"):
-            print(f"GC pipeline error: {result['error']}", file=sys.stderr)
+            print(f"GC process error: {result['error']}", file=sys.stderr)
             sys.exit(1)
         print(json.dumps(result, indent=2))
     except FileNotFoundError as e:
         print(f"Required input file not found: {e}", file=sys.stderr)
         sys.exit(1)
     except Exception as e:
-        print(f"GC pipeline failed: {e}", file=sys.stderr)
+        print(f"GC process failed: {e}", file=sys.stderr)
         sys.exit(1)
 
 
