@@ -132,9 +132,10 @@ def deduplicate_events(
 
         if cache.contains(dedup_key):
             duplicate_count += 1
+            raw = f"{event.stream_id}:{event.seq}:{event.timestamp}"
             logger.warning(
-                "Dropping duplicate event: stream=%s seq=%d ver=%d key=%s",
-                event.stream_id, event.seq, event.version, dedup_key
+                "Dropping duplicate event (ver=%d): raw_identity=%s",
+                event.version, raw
             )
             continue
 
