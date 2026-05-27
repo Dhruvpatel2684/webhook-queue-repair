@@ -1,0 +1,182 @@
+[
+  {
+    "job_id": "job-021",
+    "queue_name": "billing",
+    "priority": "high",
+    "payload": {"action": "process_payment", "gateway": "stripe"},
+    "timeout": 30,
+    "retry_count": 0,
+    "estimated_duration": 4.0
+  },
+  {
+    "job_id": "job-022",
+    "queue_name": "billing",
+    "priority": "medium",
+    "payload": {"action": "generate_statement", "period": "monthly"},
+    "timeout": 60,
+    "retry_count": 1,
+    "estimated_duration": 6.5
+  },
+  {
+    "job_id": "job-023",
+    "queue_name": "billing",
+    "priority": "low",
+    "payload": {"action": "archive_invoices", "year": 2023},
+    "timeout": 120,
+    "retry_count": 0,
+    "estimated_duration": 13.0
+  },
+  {
+    "job_id": "job-024",
+    "queue_name": "notifications",
+    "priority": "high",
+    "payload": {"action": "push_notification", "channel": "mobile"},
+    "timeout": 30,
+    "retry_count": 0,
+    "estimated_duration": 2.5
+  },
+  {
+    "job_id": "job-025",
+    "queue_name": "notifications",
+    "priority": "high",
+    "payload": {"action": "send_sms", "provider": "twilio"},
+    "timeout": 45,
+    "retry_count": 1,
+    "estimated_duration": 3.0
+  },
+  {
+    "job_id": "job-026",
+    "queue_name": "notifications",
+    "priority": "medium",
+    "payload": {"action": "batch_notifications", "count": 500},
+    "timeout": 90,
+    "retry_count": 0,
+    "estimated_duration": 8.0
+  },
+  {
+    "job_id": "job-027",
+    "queue_name": "notifications",
+    "priority": "low",
+    "payload": {"action": "cleanup_expired", "retention": "30d"},
+    "timeout": 60,
+    "retry_count": 0,
+    "estimated_duration": 5.0
+  },
+  {
+    "job_id": "job-028",
+    "queue_name": "sync",
+    "priority": "high",
+    "payload": {"action": "sync_inventory", "warehouse": "us-east"},
+    "timeout": 60,
+    "retry_count": 0,
+    "estimated_duration": 7.0
+  },
+  {
+    "job_id": "job-029",
+    "queue_name": "sync",
+    "priority": "medium",
+    "payload": {"action": "replicate_db", "target": "replica-2"},
+    "timeout": 90,
+    "retry_count": 2,
+    "estimated_duration": 10.5
+  },
+  {
+    "job_id": "job-030",
+    "queue_name": "sync",
+    "priority": "medium",
+    "payload": {"action": "sync_contacts", "source": "crm"},
+    "timeout": 45,
+    "retry_count": 0,
+    "estimated_duration": 4.5
+  },
+  {
+    "job_id": "job-031",
+    "queue_name": "billing",
+    "priority": "high",
+    "payload": {"action": "refund_transaction", "amount": 150.00},
+    "timeout": 30,
+    "retry_count": 0,
+    "estimated_duration": 3.5
+  },
+  {
+    "job_id": "job-032",
+    "queue_name": "billing",
+    "priority": "medium",
+    "payload": {"action": "update_subscription", "plan": "enterprise"},
+    "timeout": 45,
+    "retry_count": 1,
+    "estimated_duration": 5.0
+  },
+  {
+    "job_id": "job-033",
+    "queue_name": "notifications",
+    "priority": "medium",
+    "payload": {"action": "schedule_digest", "time": "08:00"},
+    "timeout": 30,
+    "retry_count": 0,
+    "estimated_duration": 3.2
+  },
+  {
+    "job_id": "job-034",
+    "queue_name": "sync",
+    "priority": "low",
+    "payload": {"action": "archive_logs", "destination": "s3"},
+    "timeout": 120,
+    "retry_count": 0,
+    "estimated_duration": 15.0
+  },
+  {
+    "job_id": "job-035",
+    "queue_name": "sync",
+    "priority": "high",
+    "payload": {"action": "sync_catalog", "items": 5000},
+    "timeout": 60,
+    "retry_count": 0,
+    "estimated_duration": 9.0
+  },
+  {
+    "job_id": "job-036",
+    "queue_name": "billing",
+    "priority": "low",
+    "payload": {"action": "audit_trail", "quarter": "Q4"},
+    "timeout": 90,
+    "retry_count": 0,
+    "estimated_duration": 11.5
+  },
+  {
+    "job_id": "job-037",
+    "queue_name": "notifications",
+    "priority": "high",
+    "payload": {"action": "send_webhook", "endpoint": "/events"},
+    "timeout": 30,
+    "retry_count": 0,
+    "estimated_duration": 2.0
+  },
+  {
+    "job_id": "job-038",
+    "queue_name": "sync",
+    "priority": "medium",
+    "payload": {"action": "delta_sync", "since": "2024-01-01"},
+    "timeout": 60,
+    "retry_count": 1,
+    "estimated_duration": 6.0
+  },
+  {
+    "job_id": "job-039",
+    "queue_name": "billing",
+    "priority": "medium",
+    "payload": {"action": "calculate_tax", "region": "EU"},
+    "timeout": 45,
+    "retry_count": 0,
+    "estimated_duration": 4.8
+  },
+  {
+    "job_id": "job-040",
+    "queue_name": "notifications",
+    "priority": "low",
+    "payload": {"action": "prune_tokens", "inactive_days": 60},
+    "timeout": 60,
+    "retry_count": 0,
+    "estimated_duration": 7.5
+  }
+]

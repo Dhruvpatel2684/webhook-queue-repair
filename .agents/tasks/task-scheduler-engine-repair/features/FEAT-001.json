@@ -1,0 +1,51 @@
+{
+  "id": "FEAT-001",
+  "type": "feat",
+  "description": "Create the complete scheduler-engine-repair Harbor Terminal-Bench task from scratch, including all runtime code with 4 embedded bugs, job data files, tests, solution, Dockerfile, instruction.md, and task.toml.",
+  "status": "in_progress",
+  "steps": [
+    "Create environment/Dockerfile with python:3.11-slim base, pip install uv, COPY runtime/ /app/runtime/, WORKDIR /app",
+    "Create environment/runtime/__init__.py (empty)",
+    "Create environment/runtime/models.py (~40 lines) with dataclasses for Job (job_id, queue_name, priority, payload, timeout, retry_count, estimated_duration) and ScheduleEntry (job_id, queue_name, priority, scheduled_round, execution_time, status)",
+    "Create environment/runtime/config.ini with [scheduler] section containing: priority_levels = high,medium,low, critical (BUG A: space before critical), max_concurrent = 20 (BUG B: wrong value here), default_timeout = 60, retry_limit = 3, execution_mode = parallel. Also [scheduler.limits] section with: max_concurrent = 5 (correct value), max_rounds = 50, time_budget = 300.0. Also [scheduler.logging] section with: level = INFO, format = structured",
+    "Create environment/runtime/parser.py (~100 lines) that loads JSON job batch files from /app/runtime/data/, validates job structure, returns list of Job objects. Include red herring: retry validation logic, timeout checking (all correct). Add comment: '# concurrency from scheduler.limits' (this is the cross-file hint for Bug B, but the bug is in executor.py)",
+    "Create environment/runtime/prioritizer.py (~80 lines) that reads priority_levels from config, filters jobs by known priority levels (BUG A manifests here: ' critical' with space never matches 'critical' tag on jobs). Include red herring: a priority weight calculation system that works correctly",
+    "Create environment/runtime/executor.py (~120 lines) that schedules jobs into rounds respecting max_concurrent limit (BUG B: reads from wrong section 'scheduler' getting 20 instead of 'scheduler.limits' getting 5), computes execution_time per job (BUG C: uses += accumulation instead of = assignment for execution_time). Include red herrings: proper timeout handling, retry logic that works correctly",
+    "Create environment/runtime/run_scheduler.py (~80 lines) as entry point that orchestrates: load config, parse jobs, prioritize, execute scheduling, sort results (BUG D: sort key is (priority, job_id) missing queue_name, should be (priority, queue_name, job_id)). Add comment near sort: '# Note: job_id is only unique within a queue'. Write output to /app/runtime/output/execution_plan.json and /app/runtime/output/schedule_summary.json",
+    "Create environment/runtime/data/jobs_batch1.json with 20 jobs across queues (email, analytics, reporting) with priorities high/medium/low, various estimated_duration values",
+    "Create environment/runtime/data/jobs_batch2.json with 20 jobs across queues (billing, notifications, sync) with priorities high/medium/low, various estimated_duration values",
+    "Create environment/runtime/data/jobs_batch3.json with 18 jobs across queues (alerts, maintenance, cleanup) with priorities including 4 jobs explicitly tagged 'critical' (these trigger Bug A). Some jobs should share priority levels across different queues (triggers Bug D)",
+    "Create environment/runtime/output/.gitkeep (empty file)",
+    "Create tests/test.sh that runs the scheduler then pytest with uv, writes reward to /logs/verifier/reward.txt",
+    "Create tests/test_scheduler.py with 10 tests in 3 classes (TestEasyBasicOutput: 4 tests, TestMediumCorrectness: 3 tests, TestHardComprehensive: 3 tests). Easy tests pass with buggy code. Medium tests need 1-2 bug fixes. Hard tests need 3-4 bug fixes. Tests check exact computed values, not just structure.",
+    "Create solution/solve.sh that runs python3 /solution/repair_scheduler.py",
+    "Create solution/repair_scheduler.py that fixes all 4 bugs via string replacement in the source files and re-runs the engine with subprocess",
+    "Create instruction.md documenting the task using ONLY absolute paths (/app/runtime/...), containing 'Global system-wide tooling' phrase, NOT containing word 'pipeline', documenting correct sort order (priority, queue_name, job_id), mentioning scheduler.limits section for execution constraints",
+    "Create task.toml with the specified metadata (author, category, difficulty, tags, etc.)",
+    "Create .gitignore for __pycache__/ and *.pyc"
+  ],
+  "acceptance_criteria": [
+    "All files exist in the correct directory structure",
+    "Docker image builds successfully with: docker build -t scheduler-test environment/",
+    "Running the scheduler produces output files execution_plan.json and schedule_summary.json",
+    "With buggy code: 4 easy tests pass, 6 medium/hard tests fail",
+    "After applying solution/repair_scheduler.py: all 10 tests pass",
+    "Code is 400+ lines total across modules",
+    "No TODO/FIXME/BUG comments anywhere in runtime code",
+    "instruction.md uses only absolute paths, contains 'Global system-wide tooling', does not contain 'pipeline'",
+    "Bug A: ' critical' with leading space in config split, fix is .strip()",
+    "Bug B: reads max_concurrent from wrong section, hint in parser.py comment, fix in executor.py",
+    "Bug C: += accumulation bug in executor.py, fix is = assignment",
+    "Bug D: sort key missing queue_name, hint comment present near bug"
+  ],
+  "verification": [
+    "docker build -t scheduler-test environment/",
+    "Run scheduler in container and verify output files are created",
+    "Run tests with buggy code - confirm 4 pass, 6 fail",
+    "Apply repair script and re-run tests - confirm all 10 pass",
+    "Verify instruction.md content requirements",
+    "Count total lines of Python code across runtime modules"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}

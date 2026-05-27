@@ -1,33 +1,33 @@
 author_name = "Dhruvkumar Patel"
 author_email = "dhruvpatel2284@gmail.com"
-category = "pattern_matching"
+category = "task_scheduling"
 difficulty = "hard"
-tags = ["regex", "nfa", "pattern-matching", "compiler", "debugging"]
-difficulty_explanation = "Requires understanding regex compilation, NFA evaluation, and tracing data flow across loader, compiler, and evaluator modules. Four bugs interact: category filtering affects pattern loading, backtrack limits affect match accuracy, count accumulation inflates results, and sort order affects determinism."
-solution_explanation = "The repair script fixes: (1) strip whitespace in category parsing, (2) read backtrack limit from correct config section, (3) use assignment instead of accumulation for match counts, (4) add category to sort key for deterministic ordering."
-verification_explanation = "10 tests in 3 difficulty tiers: easy (4 tests pass with buggy code), medium (3 tests require 1-2 fixes), hard (3 tests require all 4 bugs fixed). Reward requires all 10 tests to pass."
-expert_time_estimate_hours = 1.5
+tags = ["scheduler", "priority-queue", "concurrency", "job-scheduling", "debugging"]
+difficulty_explanation = "Four interacting bugs across config parsing, section references, accumulation logic, and sort ordering require tracing data flow through parser, prioritizer, and executor modules."
+solution_explanation = "The repair script fixes: (1) strip whitespace in priority level parsing, (2) read max_concurrent from correct config section, (3) use assignment instead of accumulation for execution times, (4) add queue_name to sort key."
+verification_explanation = "10 tests in 3 difficulty tiers: easy (4 pass with buggy code), medium (3 require 1-2 fixes), hard (3 require 3-4 fixes). Reward requires all 10 tests to pass."
+expert_time_estimate_hours = 2.0
 
 [task]
-name = "regex-engine-repair"
-description = "Debug a broken regex pattern matching engine that produces incorrect match results due to interacting bugs in category filtering, backtrack limiting, count accumulation, and result ordering across the loader, evaluator, and main modules."
+name = "scheduler-engine-repair"
+description = "Debug a priority-based task scheduling engine with four interacting bugs in config parsing, concurrency limits, execution time tracking, and schedule ordering."
 
 [task.difficulty]
 level = "hard"
-reasoning = "Four interacting bugs across three modules require understanding NFA evaluation semantics, configuration parsing, data accumulation patterns, and sort stability. Bugs are not flagged with comments and require tracing data flow to identify."
+reasoning = "Four bugs across config parsing, section references, accumulation, and sort stability require understanding scheduling semantics and tracing configuration flow across modules."
 
 [task.runtime]
-entrypoint = "python3 -m runtime.run_matcher"
+entrypoint = "python3 -m runtime.run_scheduler"
 language = "python"
 dependencies = "stdlib-only"
 
 [task.validator]
 command = "bash tests/test.sh"
-description = "Runs the regex engine to produce output, then validates correctness with pytest covering structure, category coverage, match counts, backtrack bounds, and sort ordering."
+description = "Runs the scheduler engine then validates output with pytest."
 
 [task.repair]
 command = "bash solution/solve.sh"
-description = "Applies four patches to fix category parsing whitespace, config section reference, count accumulation, and sort key, then re-runs the engine."
+description = "Applies four patches and re-runs the engine."
 
 [task.resources]
 timeout = 300

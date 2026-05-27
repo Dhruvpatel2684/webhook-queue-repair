@@ -1,0 +1,7 @@
+{
+  "task_id": "task-scheduler-engine-repair",
+  "task_description": "Create a Harbor Terminal-Bench debugging task: a priority-based task scheduling engine with 4 interacting bugs that Sonnet cannot solve but Opus can (2-4/8). Domain: Task Scheduler.",
+  "status": "in_progress",
+  "feature_order": ["FEAT-001"],
+  "blocked_reason": null
+}

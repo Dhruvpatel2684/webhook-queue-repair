@@ -1,0 +1,164 @@
+[
+  {
+    "job_id": "job-041",
+    "queue_name": "alerts",
+    "priority": "high",
+    "payload": {"action": "fire_alert", "rule": "cpu_threshold"},
+    "timeout": 30,
+    "retry_count": 0,
+    "estimated_duration": 3.0
+  },
+  {
+    "job_id": "job-042",
+    "queue_name": "alerts",
+    "priority": "critical",
+    "payload": {"action": "escalate_incident", "severity": "p1"},
+    "timeout": 30,
+    "retry_count": 0,
+    "estimated_duration": 4.5
+  },
+  {
+    "job_id": "job-043",
+    "queue_name": "alerts",
+    "priority": "medium",
+    "payload": {"action": "correlate_events", "window_sec": 300},
+    "timeout": 60,
+    "retry_count": 1,
+    "estimated_duration": 8.0
+  },
+  {
+    "job_id": "job-044",
+    "queue_name": "alerts",
+    "priority": "low",
+    "payload": {"action": "update_runbook", "service": "auth"},
+    "timeout": 90,
+    "retry_count": 0,
+    "estimated_duration": 5.5
+  },
+  {
+    "job_id": "job-045",
+    "queue_name": "maintenance",
+    "priority": "high",
+    "payload": {"action": "rotate_secrets", "scope": "production"},
+    "timeout": 45,
+    "retry_count": 0,
+    "estimated_duration": 6.0
+  },
+  {
+    "job_id": "job-046",
+    "queue_name": "maintenance",
+    "priority": "medium",
+    "payload": {"action": "vacuum_database", "tables": ["orders", "users"]},
+    "timeout": 120,
+    "retry_count": 0,
+    "estimated_duration": 12.5
+  },
+  {
+    "job_id": "job-047",
+    "queue_name": "maintenance",
+    "priority": "critical",
+    "payload": {"action": "emergency_patch", "cve": "CVE-2024-1234"},
+    "timeout": 60,
+    "retry_count": 0,
+    "estimated_duration": 10.0
+  },
+  {
+    "job_id": "job-048",
+    "queue_name": "maintenance",
+    "priority": "low",
+    "payload": {"action": "defrag_storage", "volume": "/data"},
+    "timeout": 90,
+    "retry_count": 1,
+    "estimated_duration": 9.0
+  },
+  {
+    "job_id": "job-049",
+    "queue_name": "cleanup",
+    "priority": "medium",
+    "payload": {"action": "purge_cache", "region": "us-west-2"},
+    "timeout": 45,
+    "retry_count": 0,
+    "estimated_duration": 4.0
+  },
+  {
+    "job_id": "job-050",
+    "queue_name": "cleanup",
+    "priority": "low",
+    "payload": {"action": "remove_orphans", "resource": "containers"},
+    "timeout": 60,
+    "retry_count": 0,
+    "estimated_duration": 7.0
+  },
+  {
+    "job_id": "job-051",
+    "queue_name": "cleanup",
+    "priority": "critical",
+    "payload": {"action": "emergency_gc", "heap_pct": 95},
+    "timeout": 30,
+    "retry_count": 0,
+    "estimated_duration": 5.0
+  },
+  {
+    "job_id": "job-052",
+    "queue_name": "alerts",
+    "priority": "high",
+    "payload": {"action": "notify_oncall", "channel": "pagerduty"},
+    "timeout": 30,
+    "retry_count": 0,
+    "estimated_duration": 2.5
+  },
+  {
+    "job_id": "job-053",
+    "queue_name": "maintenance",
+    "priority": "medium",
+    "payload": {"action": "update_certs", "domain": "api.example.com"},
+    "timeout": 60,
+    "retry_count": 0,
+    "estimated_duration": 7.5
+  },
+  {
+    "job_id": "job-054",
+    "queue_name": "cleanup",
+    "priority": "high",
+    "payload": {"action": "flush_queues", "target": "dead_letter"},
+    "timeout": 30,
+    "retry_count": 0,
+    "estimated_duration": 3.5
+  },
+  {
+    "job_id": "job-055",
+    "queue_name": "alerts",
+    "priority": "critical",
+    "payload": {"action": "circuit_breaker", "service": "payments"},
+    "timeout": 30,
+    "retry_count": 0,
+    "estimated_duration": 2.0
+  },
+  {
+    "job_id": "job-056",
+    "queue_name": "maintenance",
+    "priority": "high",
+    "payload": {"action": "scale_replicas", "target": 5},
+    "timeout": 45,
+    "retry_count": 0,
+    "estimated_duration": 4.0
+  },
+  {
+    "job_id": "job-057",
+    "queue_name": "cleanup",
+    "priority": "medium",
+    "payload": {"action": "compact_logs", "older_than": "14d"},
+    "timeout": 60,
+    "retry_count": 2,
+    "estimated_duration": 6.5
+  },
+  {
+    "job_id": "job-058",
+    "queue_name": "alerts",
+    "priority": "low",
+    "payload": {"action": "archive_resolved", "status": "closed"},
+    "timeout": 90,
+    "retry_count": 0,
+    "estimated_duration": 8.5
+  }
+]
