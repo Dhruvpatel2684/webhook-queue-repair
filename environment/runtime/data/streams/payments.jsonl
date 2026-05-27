@@ -1,0 +1,19 @@
+# reprocessed events from migration - includes versioned duplicates for consistency
+{"stream_id": "payments", "seq": 1, "timestamp": "2024-01-15T08:00:00+03:00", "version": 1, "event_type": "payment_received", "payload": {"transaction_id": "TXN-001", "transaction_amount": 150.00}}
+{"stream_id": "payments", "seq": 2, "timestamp": "2024-01-15T08:30:00+03:00", "version": 1, "event_type": "payment_received", "payload": {"transaction_id": "TXN-002", "transaction_amount": 230.50}}
+{"stream_id": "payments", "seq": 3, "timestamp": "2024-01-15T09:00:00+03:00", "version": 1, "event_type": "payment_received", "payload": {"transaction_id": "TXN-003", "transaction_amount": 89.99}}
+{"stream_id": "payments", "seq": 4, "timestamp": "2024-01-15T09:30:00+03:00", "version": 1, "event_type": "payment_refunded", "payload": {"transaction_id": "TXN-001", "transaction_amount": 50.00}}
+{"stream_id": "payments", "seq": 5, "timestamp": "2024-01-15T10:00:00+03:00", "version": 1, "event_type": "payment_received", "payload": {"transaction_id": "TXN-004", "transaction_amount": 312.75}}
+{"stream_id": "payments", "seq": 5, "timestamp": "2024-01-15T10:00:00+03:00", "version": 2, "event_type": "payment_received", "payload": {"transaction_id": "TXN-004", "transaction_amount": 325.00}}
+{"stream_id": "payments", "seq": 6, "timestamp": "2024-01-15T10:30:00+03:00", "version": 1, "event_type": "payment_adjusted", "payload": {"transaction_id": "TXN-002", "transaction_amount": 210.50}}
+{"stream_id": "payments", "seq": 7, "timestamp": "2024-01-15T11:00:00+03:00", "version": 1, "event_type": "payment_received", "payload": {"transaction_id": "TXN-005", "transaction_amount": 67.25}}
+{"stream_id": "payments", "seq": 8, "timestamp": "2024-01-15T11:30:00+03:00", "version": 1, "event_type": "payment_refunded", "payload": {"transaction_id": "TXN-003", "transaction_amount": 89.99}}
+{"stream_id": "payments", "seq": 9, "timestamp": "2024-01-15T12:00:00+03:00", "version": 1, "event_type": "payment_received", "payload": {"transaction_id": "TXN-006", "transaction_amount": 199.00}}
+{"stream_id": "payments", "seq": 10, "timestamp": "2024-01-15T12:30:00+03:00", "version": 1, "event_type": "payment_adjusted", "payload": {"transaction_id": "TXN-004", "transaction_amount": 300.00}}
+{"stream_id": "payments", "seq": 10, "timestamp": "2024-01-15T12:30:00+03:00", "version": 2, "event_type": "payment_adjusted", "payload": {"transaction_id": "TXN-004", "transaction_amount": 280.00}}
+{"stream_id": "payments", "seq": 11, "timestamp": "2024-01-15T13:00:00+03:00", "version": 1, "event_type": "payment_received", "payload": {"transaction_id": "TXN-007", "transaction_amount": 445.00}}
+{"stream_id": "payments", "seq": 12, "timestamp": "2024-01-15T13:30:00+03:00", "version": 1, "event_type": "payment_refunded", "payload": {"transaction_id": "TXN-005", "transaction_amount": 67.25}}
+{"stream_id": "payments", "seq": 13, "timestamp": "2024-01-15T14:00:00+03:00", "version": 1, "event_type": "payment_received", "payload": {"transaction_id": "TXN-008", "transaction_amount": 128.50}}
+{"stream_id": "payments", "seq": 14, "timestamp": "2024-01-15T14:30:00+03:00", "version": 1, "event_type": "payment_received", "payload": {"transaction_id": "TXN-009", "transaction_amount": 95.00}}
+{"stream_id": "payments", "seq": 15, "timestamp": "2024-01-15T15:00:00+03:00", "version": 1, "event_type": "payment_adjusted", "payload": {"transaction_id": "TXN-006", "transaction_amount": 185.00}}
+{"stream_id": "payments", "seq": 16, "timestamp": "2024-01-15T15:30:00+03:00", "version": 1, "event_type": "payment_received", "payload": {"transaction_id": "TXN-010", "transaction_amount": 550.00}}

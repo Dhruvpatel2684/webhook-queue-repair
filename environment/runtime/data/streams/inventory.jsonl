@@ -1,0 +1,15 @@
+{"stream_id": "inventory", "seq": 1, "timestamp": "2024-01-15T06:00:00+08:00", "version": 1, "event_type": "inventory_added", "payload": {"product_id": "PROD-001", "quantity_count": 500}}
+{"stream_id": "inventory", "seq": 2, "timestamp": "2024-01-15T07:00:00+08:00", "version": 1, "event_type": "inventory_added", "payload": {"product_id": "PROD-002", "quantity_count": 350}}
+{"stream_id": "inventory", "seq": 3, "timestamp": "2024-01-15T08:00:00+08:00", "version": 1, "event_type": "inventory_removed", "payload": {"product_id": "PROD-001", "quantity_count": 25}}
+{"stream_id": "inventory", "seq": 4, "timestamp": "2024-01-15T09:00:00+08:00", "version": 1, "event_type": "inventory_adjusted", "payload": {"product_id": "PROD-001", "quantity_count": 480}}
+{"stream_id": "inventory", "seq": 5, "timestamp": "2024-01-15T10:00:00+08:00", "version": 1, "event_type": "inventory_added", "payload": {"product_id": "PROD-003", "quantity_count": 200}}
+{"stream_id": "inventory", "seq": 6, "timestamp": "2024-01-15T11:00:00+08:00", "version": 1, "event_type": "inventory_removed", "payload": {"product_id": "PROD-002", "quantity_count": 100}}
+{"stream_id": "inventory", "seq": 7, "timestamp": "2024-01-15T12:00:00+08:00", "version": 1, "event_type": "inventory_added", "payload": {"product_id": "PROD-001", "quantity_count": 300}}
+{"stream_id": "inventory", "seq": 8, "timestamp": "2024-01-15T13:00:00+08:00", "version": 1, "event_type": "inventory_adjusted", "payload": {"product_id": "PROD-002", "quantity_count": 275}}
+{"stream_id": "inventory", "seq": 9, "timestamp": "2024-01-15T14:00:00+08:00", "version": 1, "event_type": "inventory_removed", "payload": {"product_id": "PROD-003", "quantity_count": 50}}
+{"stream_id": "inventory", "seq": 10, "timestamp": "2024-01-15T15:00:00+08:00", "version": 1, "event_type": "inventory_added", "payload": {"product_id": "PROD-002", "quantity_count": 150}}
+{"stream_id": "inventory", "seq": 11, "timestamp": "2024-01-15T16:00:00+08:00", "version": 1, "event_type": "inventory_adjusted", "payload": {"product_id": "PROD-003", "quantity_count": 180}}
+{"stream_id": "inventory", "seq": 12, "timestamp": "2024-01-15T17:00:00+08:00", "version": 1, "event_type": "inventory_removed", "payload": {"product_id": "PROD-001", "quantity_count": 75}}
+{"stream_id": "inventory", "seq": 13, "timestamp": "2024-01-15T18:00:00+08:00", "version": 1, "event_type": "inventory_added", "payload": {"product_id": "PROD-001", "quantity_count": 120}}
+{"stream_id": "inventory", "seq": 14, "timestamp": "2024-01-15T19:00:00+08:00", "version": 1, "event_type": "inventory_added", "payload": {"product_id": "PROD-003", "quantity_count": 90}}
+{"stream_id": "inventory", "seq": 15, "timestamp": "2024-01-15T20:00:00+08:00", "version": 1, "event_type": "inventory_removed", "payload": {"product_id": "PROD-002", "quantity_count": 60}}

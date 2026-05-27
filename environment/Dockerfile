@@ -1,9 +1,4 @@
 FROM python:3.11-slim
-
+RUN pip install uv pyyaml
+COPY runtime/ /app/runtime/
 WORKDIR /app
-
-COPY runtime/ ./runtime/
-
-RUN pip install uv
-
-CMD ["python3", "/app/runtime/replay_engine.py"]

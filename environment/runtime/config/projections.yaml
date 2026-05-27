@@ -1,0 +1,128 @@
+projections:
+  # Order total aggregations
+  - source_stream: orders
+    event_type: order_created
+    target_view: order_summary
+    target_field: total_amount
+    merge_mode: sum
+    priority: 10
+    payload_field: order_amount
+
+  - source_stream: orders
+    event_type: order_updated
+    target_view: order_summary
+    target_field: total_amount
+    merge_mode: sum
+    priority: 10
+    payload_field: order_amount
+
+  - source_stream: orders
+    event_type: order_completed
+    target_view: order_summary
+    target_field: completed_total
+    merge_mode: sum
+    priority: 10
+    payload_field: order_amount
+
+  # Payment tracking
+  - source_stream: payments
+    event_type: payment_received
+    target_view: payment_ledger
+    target_field: received_total
+    merge_mode: sum
+    priority: 20
+    payload_field: transaction_amount
+
+  - source_stream: payments
+    event_type: payment_refunded
+    target_view: payment_ledger
+    target_field: refund_total
+    merge_mode: sum
+    priority: 20
+    payload_field: transaction_amount
+
+  - source_stream: payments
+    event_type: payment_adjusted
+    target_view: payment_ledger
+    target_field: last_adjustment
+    merge_mode: last_write
+    priority: 20
+    payload_field: transaction_amount
+
+  # Inventory levels - last_write tracks current stock
+  - source_stream: inventory
+    event_type: inventory_added
+    target_view: inventory_status
+    target_field: current_stock
+    merge_mode: last_write
+    priority: 15
+    payload_field: quantity_count
+
+  - source_stream: inventory
+    event_type: inventory_removed
+    target_view: inventory_status
+    target_field: removed_total
+    merge_mode: sum
+    priority: 15
+    payload_field: quantity_count
+
+  - source_stream: inventory
+    event_type: inventory_adjusted
+    target_view: inventory_status
+    target_field: adjustment_max
+    merge_mode: max
+    priority: 15
+    payload_field: quantity_count
+
+  # Shipment tracking
+  - source_stream: shipments
+    event_type: shipment_dispatched
+    target_view: shipping_overview
+    target_field: dispatch_count
+    merge_mode: count
+    priority: 30
+    payload_field: shipment_weight
+
+  - source_stream: shipments
+    event_type: shipment_delivered
+    target_view: shipping_overview
+    target_field: total_weight
+    merge_mode: sum
+    priority: 30
+    payload_field: shipment_weight
+
+  # Shipment also writes to fulfillment view (priority conflict with returns)
+  - source_stream: shipments
+    event_type: shipment_delivered
+    target_view: fulfillment_score
+    target_field: delivery_metric
+    merge_mode: sum
+    priority: 40
+    payload_field: shipment_weight
+
+  # Returns tracking
+  - source_stream: returns
+    event_type: return_received
+    target_view: returns_summary
+    target_field: return_total
+    merge_mode: sum
+    priority: 25
+    payload_field: return_amount
+
+  - source_stream: returns
+    event_type: return_processed
+    target_view: returns_summary
+    target_field: processed_amount
+    merge_mode: sum
+    priority: 25
+    payload_field: return_amount
+
+  # Returns also writes to fulfillment view (priority conflict with shipments)
+  # Higher priority wins - returns at priority 50 should override shipments at 40
+  - source_stream: returns
+    event_type: return_processed
+    target_view: fulfillment_score
+    target_field: delivery_metric
+    merge_mode: sum
+    priority: 50
+    payload_field: return_amount
