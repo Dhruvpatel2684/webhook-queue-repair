@@ -84,10 +84,6 @@ class LRUDedupCache:
         }
 
 
-# Dedup strategy: events are uniquely identified by their stream, position,
-# and schema version. Reprocessed events share coordinates but differ in version.
-
-
 def compute_dedup_key(event: Event) -> str:
     """
     Compute the deduplication hash key for an event.
@@ -101,7 +97,6 @@ def compute_dedup_key(event: Event) -> str:
     Returns:
         Hex digest string of the hash
     """
-    # Identity key: stream_id + seq + version (see engine.ini dedup_fields)
     raw_key = f"{event.stream_id}:{event.seq}:{event.timestamp}"
     return hashlib.sha256(raw_key.encode("utf-8")).hexdigest()
 
