@@ -84,6 +84,10 @@ class LRUDedupCache:
         }
 
 
+# Dedup strategy: events are uniquely identified by their stream, position,
+# and schema version. Reprocessed events share coordinates but differ in version.
+
+
 def compute_dedup_key(event: Event) -> str:
     """
     Compute the deduplication hash key for an event.

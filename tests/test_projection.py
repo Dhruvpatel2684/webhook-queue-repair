@@ -99,7 +99,9 @@ class TestDataIntegrity:
         # With Bug B present: 2 events incorrectly deduped, leaving 78
         assert metadata["events_after_dedup"] == 80, (
             f"Expected 80 events after dedup (no true duplicates exist), "
-            f"got {metadata['events_after_dedup']}"
+            f"got {metadata['events_after_dedup']}. Check dedup key composition "
+            f"in dedup_engine.py - events with same coordinates but different "
+            f"versions should be treated as distinct"
         )
 
     def test_last_write_not_max(self, projections):
@@ -226,7 +228,10 @@ class TestProjectionAccuracy:
         """
         # Metadata checks
         assert metadata["total_events_loaded"] == 80
-        assert metadata["events_after_dedup"] == 80
+        assert metadata["events_after_dedup"] == 80, (
+            "Dedup should preserve all 80 events (reprocessed events with "
+            "different versions are distinct)"
+        )
         assert metadata["projections_created"] == 13
         assert metadata["windows_processed"] == 2
         assert len(metadata["streams_processed"]) == 5

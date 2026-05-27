@@ -29,7 +29,7 @@ Each event stream is a JSONL file where each line is a JSON object with:
 - `stream_id`: Identifier for the event stream
 - `seq`: Sequence number (integer, monotonically increasing within a stream)
 - `timestamp`: ISO 8601 timestamp with timezone offset
-- `version`: Event schema version (integer)
+- `version`: Event schema version (integer) — reprocessed events retain their original stream position and timestamp but receive an incremented version
 - `event_type`: The type of domain event
 - `payload`: Dictionary containing event-specific data fields
 
