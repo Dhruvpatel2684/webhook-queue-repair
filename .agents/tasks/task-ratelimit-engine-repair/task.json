@@ -1,7 +1,7 @@
 {
   "task_id": "task-ratelimit-engine-repair",
   "task_description": "Create a Harbor Terminal-Bench debugging task for a multi-tenant rate limiting engine with 4 interacting bugs across 6 modules (900+ lines). The task must be hard enough that Sonnet cannot solve it reliably (target 0-2/5 pass rate).",
-  "status": "in_progress",
+  "status": "completed",
   "feature_order": ["FEAT-001"],
   "blocked_reason": null
 }

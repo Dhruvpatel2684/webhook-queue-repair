@@ -2,7 +2,7 @@
   "id": "FEAT-001",
   "type": "feat",
   "description": "Create the complete ratelimit-engine-repair Harbor Terminal-Bench task with 6 Python modules (900+ lines total), 4 interacting bugs, red herring code, test suite, solution, instruction.md, task.toml, Dockerfile, and data files.",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "Create environment/Dockerfile: FROM python:3.11-slim, pip install uv, COPY runtime/, WORKDIR /app",
     "Create environment/runtime/__init__.py (empty)",
@@ -49,5 +49,5 @@
     "Verify instruction.md: grep 'Global system-wide tooling' instruction.md succeeds, grep 'pipeline' instruction.md fails"
   ],
   "blocked_reason": null,
-  "findings": ""
+  "findings": "All 4 bugs verified working correctly. Buggy code: 4/10 tests pass (easy tests only). Individual fixes: Fix1=6/10, Fix2=4/10, Fix3=5/10, Fix4=5/10. Triple fixes: max 9/10 (missing fix 4). Only all 4 fixes together get 10/10. Total Python lines: 1947. No forbidden words. Bug C separation is ~30 lines apart in throttler.py. Cross-tier sort collisions confirmed at multiple score levels."
 }
