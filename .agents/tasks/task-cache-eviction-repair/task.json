@@ -1,0 +1,7 @@
+{
+  "task_id": "task-cache-eviction-repair",
+  "task_description": "Create a complete Harbor Terminal-Bench debugging task for a multi-tier cache eviction engine with 4 interacting bugs across config parsing, section references, accumulation logic, and sort ordering.",
+  "status": "in_progress",
+  "feature_order": ["FEAT-001"],
+  "blocked_reason": null
+}

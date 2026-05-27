@@ -1,29 +1,29 @@
 author_name = "Dhruvkumar Patel"
 author_email = "dhruvpatel2284@gmail.com"
-category = "task_scheduling"
+category = "caching"
 difficulty = "hard"
-tags = ["scheduler", "priority-queue", "concurrency", "job-scheduling", "debugging"]
-difficulty_explanation = "Four interacting bugs across config parsing, section references, accumulation logic, and sort ordering require tracing data flow through parser, prioritizer, and executor modules."
-solution_explanation = "The repair script fixes: (1) strip whitespace in priority level parsing, (2) read max_concurrent from correct config section, (3) use assignment instead of accumulation for execution times, (4) add queue_name to sort key."
+tags = ["cache", "eviction", "lru", "performance", "debugging"]
+difficulty_explanation = "Four interacting bugs across config parsing, section references, accumulation logic, and sort ordering require tracing data flow through analyzer, tier_filter, and evictor modules."
+solution_explanation = "The repair script fixes: (1) strip whitespace in tier parsing, (2) read eviction_threshold from correct config section, (3) use assignment instead of accumulation for hit counts, (4) add tier_name to sort key."
 verification_explanation = "10 tests in 3 difficulty tiers: easy (4 pass with buggy code), medium (3 require 1-2 fixes), hard (3 require 3-4 fixes). Reward requires all 10 tests to pass."
 expert_time_estimate_hours = 2.0
 
 [task]
-name = "scheduler-engine-repair"
-description = "Debug a priority-based task scheduling engine with four interacting bugs in config parsing, concurrency limits, execution time tracking, and schedule ordering."
+name = "cache-eviction-repair"
+description = "Debug a multi-tier cache eviction engine with four interacting bugs in config parsing, eviction thresholds, hit count tracking, and eviction ordering."
 
 [task.difficulty]
 level = "hard"
-reasoning = "Four bugs across config parsing, section references, accumulation, and sort stability require understanding scheduling semantics and tracing configuration flow across modules."
+reasoning = "Four bugs across config parsing, section references, accumulation, and sort stability require understanding cache eviction semantics and tracing configuration flow across modules."
 
 [task.runtime]
-entrypoint = "python3 -m runtime.run_scheduler"
+entrypoint = "python3 -m runtime.run_cache"
 language = "python"
 dependencies = "stdlib-only"
 
 [task.validator]
 command = "bash tests/test.sh"
-description = "Runs the scheduler engine then validates output with pytest."
+description = "Runs the cache engine then validates output with pytest."
 
 [task.repair]
 command = "bash solution/solve.sh"
