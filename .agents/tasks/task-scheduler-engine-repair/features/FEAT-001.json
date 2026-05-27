@@ -2,7 +2,7 @@
   "id": "FEAT-001",
   "type": "feat",
   "description": "Create the complete scheduler-engine-repair Harbor Terminal-Bench task from scratch, including all runtime code with 4 embedded bugs, job data files, tests, solution, Dockerfile, instruction.md, and task.toml.",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "Create environment/Dockerfile with python:3.11-slim base, pip install uv, COPY runtime/ /app/runtime/, WORKDIR /app",
     "Create environment/runtime/__init__.py (empty)",
@@ -47,5 +47,5 @@
     "Count total lines of Python code across runtime modules"
   ],
   "blocked_reason": null,
-  "findings": ""
+  "findings": "All 4 bugs verified working: Bug A filters out 4 critical jobs (54 instead of 58), Bug B uses max_concurrent=20 (rounds have up to 20 jobs), Bug C doubles execution_time via accumulation (values up to 54s), Bug D sorts by (priority, job_id) missing queue_name. With buggy code: 4 easy tests pass, 6 medium/hard fail. After repair: all 10 pass. Total runtime Python: 600 lines."
 }
