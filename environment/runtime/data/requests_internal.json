@@ -1,0 +1,20 @@
+[
+  {"client_id": "int-client-01", "service_tier": "premium", "timestamp": 1015.0, "payload_size": 5200, "endpoint": "/internal/sync", "request_id": "d0e1f2a3-aaaa-4000-8000-000000000001"},
+  {"client_id": "int-client-01", "service_tier": "premium", "timestamp": 1048.0, "payload_size": 5800, "endpoint": "/internal/replicate", "request_id": "d0e1f2a3-aaaa-4000-8000-000000000002"},
+  {"client_id": "int-client-01", "service_tier": "premium", "timestamp": 1088.0, "payload_size": 6600, "endpoint": "/internal/sync", "request_id": "d0e1f2a3-aaaa-4000-8000-000000000003"},
+  {"client_id": "int-client-01", "service_tier": "premium", "timestamp": 1120.0, "payload_size": 7100, "endpoint": "/internal/batch", "request_id": "d0e1f2a3-aaaa-4000-8000-000000000004"},
+  {"client_id": "int-client-01", "service_tier": "premium", "timestamp": 1162.0, "payload_size": 4900, "endpoint": "/internal/replicate", "request_id": "d0e1f2a3-aaaa-4000-8000-000000000005"},
+  {"client_id": "int-client-02", "service_tier": "premium", "timestamp": 1022.0, "payload_size": 6400, "endpoint": "/internal/batch", "request_id": "e1f2a3b4-bbbb-4000-8000-000000000001"},
+  {"client_id": "int-client-02", "service_tier": "premium", "timestamp": 1065.0, "payload_size": 7500, "endpoint": "/internal/sync", "request_id": "e1f2a3b4-bbbb-4000-8000-000000000002"},
+  {"client_id": "int-client-02", "service_tier": "premium", "timestamp": 1095.0, "payload_size": 5300, "endpoint": "/internal/replicate", "request_id": "e1f2a3b4-bbbb-4000-8000-000000000003"},
+  {"client_id": "int-client-02", "service_tier": "premium", "timestamp": 1140.0, "payload_size": 5900, "endpoint": "/internal/batch", "request_id": "e1f2a3b4-bbbb-4000-8000-000000000004"},
+  {"client_id": "int-client-02", "service_tier": "premium", "timestamp": 1185.0, "payload_size": 6700, "endpoint": "/internal/sync", "request_id": "e1f2a3b4-bbbb-4000-8000-000000000005"},
+  {"client_id": "xnt-client-03", "service_tier": "premium", "timestamp": 1030.0, "payload_size": 5100, "endpoint": "/internal/replicate", "request_id": "f2a3b4c5-cccc-4000-8000-000000000001"},
+  {"client_id": "xnt-client-03", "service_tier": "premium", "timestamp": 1090.0, "payload_size": 5400, "endpoint": "/internal/batch", "request_id": "f2a3b4c5-cccc-4000-8000-000000000002"},
+  {"client_id": "xnt-client-03", "service_tier": "premium", "timestamp": 1155.0, "payload_size": 5200, "endpoint": "/internal/sync", "request_id": "f2a3b4c5-cccc-4000-8000-000000000003"},
+  {"client_id": "int-ent-01", "service_tier": "enterprise", "timestamp": 1018.0, "payload_size": 5800, "endpoint": "/internal/priority", "request_id": "a3b4c5d6-dddd-4000-8000-000000000001"},
+  {"client_id": "int-ent-01", "service_tier": "enterprise", "timestamp": 1055.0, "payload_size": 6500, "endpoint": "/internal/priority", "request_id": "a3b4c5d6-dddd-4000-8000-000000000002"},
+  {"client_id": "int-ent-01", "service_tier": "enterprise", "timestamp": 1105.0, "payload_size": 5100, "endpoint": "/internal/priority", "request_id": "a3b4c5d6-dddd-4000-8000-000000000003"},
+  {"client_id": "int-ent-02", "service_tier": "enterprise", "timestamp": 1028.0, "payload_size": 6200, "endpoint": "/internal/priority", "request_id": "b4c5d6e7-eeee-4000-8000-000000000001"},
+  {"client_id": "int-ent-02", "service_tier": "enterprise", "timestamp": 1130.0, "payload_size": 5400, "endpoint": "/internal/priority", "request_id": "b4c5d6e7-eeee-4000-8000-000000000002"}
+]

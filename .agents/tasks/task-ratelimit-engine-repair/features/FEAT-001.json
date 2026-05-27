@@ -1,0 +1,53 @@
+{
+  "id": "FEAT-001",
+  "type": "feat",
+  "description": "Create the complete ratelimit-engine-repair Harbor Terminal-Bench task with 6 Python modules (900+ lines total), 4 interacting bugs, red herring code, test suite, solution, instruction.md, task.toml, Dockerfile, and data files.",
+  "status": "in_progress",
+  "steps": [
+    "Create environment/Dockerfile: FROM python:3.11-slim, pip install uv, COPY runtime/, WORKDIR /app",
+    "Create environment/runtime/__init__.py (empty)",
+    "Create environment/runtime/config.ini with Bug A (space before enterprise in service_tiers) and Bug B (bucket_capacity=1000 in [limiter], correct bucket_capacity=100 in [limiter.tokens])",
+    "Create environment/runtime/models.py (~60 lines): dataclasses for RequestEntry, ThrottleDecision, LimiterReport, enums for ServiceTier and Decision",
+    "Create environment/runtime/utils.py (~80 lines): utility functions including hash_client_id (truncates to 8 chars - red herring), time window calculations, AND the dead-code _validate_config_invariants function that hints at Bug B fix (reads from limiter.tokens)",
+    "Create environment/runtime/ingester.py (~150 lines): request log ingestion with complex retry/deduplication logic (RED HERRING - looks like accumulation bug but correctly deduplicates). Loads JSON files from data/, validates entries, handles transient errors with exponential backoff",
+    "Create environment/runtime/classifier.py (~130 lines): tier classification using config service_tiers (Bug A manifests here - ' enterprise' never matches 'enterprise'). Include rate calculation that divides by window_count (RED HERRING off-by-one that is actually correct)",
+    "Create environment/runtime/throttler.py (~180 lines): token bucket + sliding window algorithm. Bug B: reads bucket_capacity from wrong section 'limiter' instead of 'limiter.tokens'. Bug C: consumed[client_id]['tokens_used'] += tokens in TWO passes (doubles count). Include proper sliding window logic that makes the doubling non-obvious",
+    "Create environment/runtime/reporter.py (~120 lines): report generation with weighted moving average calculation using /= and *= operators (RED HERRING - looks like accumulation but produces correct averages). Generates limiter_report.json",
+    "Create environment/runtime/run_limiter.py (~100 lines): entry point that orchestrates all modules. Bug D: sorts results by (throttle_score, client_id) instead of (throttle_score, service_tier, client_id). Include comment '# Note: client_id is scoped to a service tier'. Writes throttle_plan.json",
+    "Create environment/runtime/data/requests_web.json: 22 API request log entries across basic and standard tiers, multiple time windows, multiple clients per tier with same throttle scores",
+    "Create environment/runtime/data/requests_api.json: 20 API request log entries across standard and premium tiers, spanning multiple windows",
+    "Create environment/runtime/data/requests_internal.json: 18 API request log entries, 5 of which have tier 'enterprise' (triggers Bug A). Include clients that share throttle scores with other tiers (triggers Bug D)",
+    "Create environment/runtime/output/.gitkeep",
+    "Create tests/test.sh: cd to /app, run the limiter, then uv run --with pytest pytest /tests/test_limiter.py",
+    "Create tests/test_limiter.py: 10 tests in 3 classes (TestEasyBasicOutput 4 tests, TestMediumCorrectness 3 tests, TestHardComprehensive 3 tests). Tests check EXACT computed values. Error messages must NOT directly point to fixes. Easy tests pass with buggy code. Medium tests require 1-2 fixes. Hard tests require all 4 fixes.",
+    "Create solution/solve.sh: runs repair_limiter.py then re-runs the engine",
+    "Create solution/repair_limiter.py: applies all 4 fixes (strip in split, correct config section, assignment not accumulation, add service_tier to sort)",
+    "Create instruction.md: absolute paths only, 'Global system-wide tooling' phrase, NO 'pipeline' word, documents sort order as 'sorted by throttle score, then service tier, then client identifier'",
+    "Create task.toml with the exact content specified in the requirements",
+    "Create .gitignore for __pycache__ and output JSON files"
+  ],
+  "acceptance_criteria": [
+    "6 Python modules exist with combined 900+ lines (excluding blank lines and comments)",
+    "config.ini has space before 'enterprise' in service_tiers and bucket_capacity=1000 in [limiter] section",
+    "utils.py contains _validate_config_invariants that reads from 'limiter.tokens' but is never called in production",
+    "No BUG/FIXME/TODO/HACK comments anywhere in source code",
+    "instruction.md uses absolute paths, contains 'Global system-wide tooling', does not contain 'pipeline'",
+    "Dockerfile uses FROM python:3.11-slim and pip install uv",
+    "test.sh uses 'uv run --with pytest pytest /tests/test_limiter.py'",
+    "Running the buggy code produces output but with wrong values",
+    "After applying solution/repair_limiter.py, all 10 tests pass",
+    "Red herring code in ingester.py, reporter.py, classifier.py, and utils.py looks suspicious but is correct",
+    "Bug C doubling happens in two passes that are not adjacent in the code",
+    "Tests assert exact values, not ranges (except throttle_rate which uses a range)"
+  ],
+  "verification": [
+    "Count lines: find environment/runtime -name '*.py' -exec cat {} + | wc -l should be >= 900",
+    "Run buggy code: cd environment && python3 -m runtime.run_limiter - should produce output files",
+    "Run solution: python3 solution/repair_limiter.py - should patch files",
+    "Run fixed code: cd environment && python3 -m runtime.run_limiter - should produce correct output",
+    "Grep for forbidden words: grep -rn 'BUG\\|FIXME\\|TODO\\|HACK' environment/runtime/ should return nothing",
+    "Verify instruction.md: grep 'Global system-wide tooling' instruction.md succeeds, grep 'pipeline' instruction.md fails"
+  ],
+  "blocked_reason": null,
+  "findings": ""
+}

@@ -1,0 +1,22 @@
+[
+  {"client_id": "api-client-01", "service_tier": "standard", "timestamp": 1008.0, "payload_size": 5200, "endpoint": "/api/v2/data", "request_id": "f6a7b8c9-6666-4000-8000-000000000001"},
+  {"client_id": "api-client-01", "service_tier": "standard", "timestamp": 1038.0, "payload_size": 4500, "endpoint": "/api/v2/query", "request_id": "f6a7b8c9-6666-4000-8000-000000000002"},
+  {"client_id": "api-client-01", "service_tier": "standard", "timestamp": 1085.0, "payload_size": 5800, "endpoint": "/api/v2/data", "request_id": "f6a7b8c9-6666-4000-8000-000000000003"},
+  {"client_id": "api-client-01", "service_tier": "standard", "timestamp": 1110.0, "payload_size": 4200, "endpoint": "/api/v2/stream", "request_id": "f6a7b8c9-6666-4000-8000-000000000004"},
+  {"client_id": "api-client-01", "service_tier": "standard", "timestamp": 1150.0, "payload_size": 5800, "endpoint": "/api/v2/query", "request_id": "f6a7b8c9-6666-4000-8000-000000000005"},
+  {"client_id": "api-client-02", "service_tier": "standard", "timestamp": 1020.0, "payload_size": 6100, "endpoint": "/api/v2/bulk", "request_id": "a7b8c9d0-7777-4000-8000-000000000001"},
+  {"client_id": "api-client-02", "service_tier": "standard", "timestamp": 1055.0, "payload_size": 5800, "endpoint": "/api/v2/data", "request_id": "a7b8c9d0-7777-4000-8000-000000000002"},
+  {"client_id": "api-client-02", "service_tier": "standard", "timestamp": 1092.0, "payload_size": 6200, "endpoint": "/api/v2/query", "request_id": "a7b8c9d0-7777-4000-8000-000000000003"},
+  {"client_id": "api-client-02", "service_tier": "standard", "timestamp": 1125.0, "payload_size": 5500, "endpoint": "/api/v2/stream", "request_id": "a7b8c9d0-7777-4000-8000-000000000004"},
+  {"client_id": "api-client-02", "service_tier": "standard", "timestamp": 1175.0, "payload_size": 7200, "endpoint": "/api/v2/bulk", "request_id": "a7b8c9d0-7777-4000-8000-000000000005"},
+  {"client_id": "api-client-03", "service_tier": "premium", "timestamp": 1012.0, "payload_size": 5500, "endpoint": "/api/v2/analytics", "request_id": "b8c9d0e1-8888-4000-8000-000000000001"},
+  {"client_id": "api-client-03", "service_tier": "premium", "timestamp": 1045.0, "payload_size": 6200, "endpoint": "/api/v2/reports", "request_id": "b8c9d0e1-8888-4000-8000-000000000002"},
+  {"client_id": "api-client-03", "service_tier": "premium", "timestamp": 1082.0, "payload_size": 5600, "endpoint": "/api/v2/analytics", "request_id": "b8c9d0e1-8888-4000-8000-000000000003"},
+  {"client_id": "api-client-03", "service_tier": "premium", "timestamp": 1115.0, "payload_size": 6800, "endpoint": "/api/v2/export", "request_id": "b8c9d0e1-8888-4000-8000-000000000004"},
+  {"client_id": "api-client-03", "service_tier": "premium", "timestamp": 1160.0, "payload_size": 5100, "endpoint": "/api/v2/reports", "request_id": "b8c9d0e1-8888-4000-8000-000000000005"},
+  {"client_id": "api-client-04", "service_tier": "premium", "timestamp": 1025.0, "payload_size": 6500, "endpoint": "/api/v2/export", "request_id": "c9d0e1f2-9999-4000-8000-000000000001"},
+  {"client_id": "api-client-04", "service_tier": "premium", "timestamp": 1060.0, "payload_size": 5800, "endpoint": "/api/v2/analytics", "request_id": "c9d0e1f2-9999-4000-8000-000000000002"},
+  {"client_id": "api-client-04", "service_tier": "premium", "timestamp": 1098.0, "payload_size": 6800, "endpoint": "/api/v2/reports", "request_id": "c9d0e1f2-9999-4000-8000-000000000003"},
+  {"client_id": "api-client-04", "service_tier": "premium", "timestamp": 1135.0, "payload_size": 5300, "endpoint": "/api/v2/export", "request_id": "c9d0e1f2-9999-4000-8000-000000000004"},
+  {"client_id": "api-client-04", "service_tier": "premium", "timestamp": 1180.0, "payload_size": 6100, "endpoint": "/api/v2/analytics", "request_id": "c9d0e1f2-9999-4000-8000-000000000005"}
+]

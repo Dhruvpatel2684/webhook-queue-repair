@@ -1,166 +1,120 @@
-# Cache Eviction Engine Repair
+# Multi-Tenant Rate Limiting Engine
 
 ## Overview
 
-Global system-wide tooling for multi-tier cache management. This engine evaluates cache entries across multiple storage tiers, computes eviction priority scores, and produces a deterministic eviction plan. The system processes access logs, filters entries by tier membership, scores each entry for eviction candidacy, and outputs structured JSON results for downstream cache controllers.
+This system implements a multi-tenant rate limiting engine that processes API request logs, classifies them by service tier, applies token bucket throttling with sliding window tracking, and produces deterministic throttle plans and aggregate reports.
 
-## System Architecture
+The engine is designed as Global system-wide tooling for managing request throughput across multiple service tiers with independent capacity enforcement per client.
 
-The cache eviction engine consists of four coordinating modules:
+## Architecture
 
-### Analyzer (`/app/runtime/analyzer.py`)
+The engine consists of six core modules operating in sequence:
 
-The access log analyzer loads structured JSON access log files from the data directory. It validates each record against the expected schema, converts raw data into typed `CacheEntry` objects, and computes aggregate access cost metrics. Invalid records are logged and skipped without halting the overall process.
+1. **Ingester** (`/app/runtime/ingester.py`): Loads JSON request log files from `/app/runtime/data/`, validates entries, deduplicates by request ID, and produces structured `RequestEntry` objects.
 
-### Tier Filter (`/app/runtime/tier_filter.py`)
+2. **Classifier** (`/app/runtime/classifier.py`): Groups validated requests by their service tier based on the configured tier list. Only requests matching a configured tier are included in throttle evaluation.
 
-The tier filter determines which cache entries belong to active tiers as defined in the configuration. Entries associated with unrecognized or disabled tiers are excluded from eviction evaluation. The filter also enforces structural constraints: entries with expired TTLs or sizes exceeding the configured maximum are rejected.
+3. **Throttler** (`/app/runtime/throttler.py`): Implements token bucket capacity enforcement with sliding window decay. Computes per-client token consumption within discrete time windows and issues allow/throttle decisions.
 
-### Evictor (`/app/runtime/evictor.py`)
+4. **Reporter** (`/app/runtime/reporter.py`): Generates aggregate metrics including throttle rate, per-tier request counts, and window coverage statistics.
 
-The eviction engine computes a composite score for each cache entry and schedules eviction decisions. The scoring formula considers three factors:
+5. **Models** (`/app/runtime/models.py`): Defines the data structures used across all modules including `RequestEntry`, `ThrottleDecision`, and `LimiterReport`.
 
-- **Inverse access frequency**: Less frequently accessed entries receive higher scores
-- **Size pressure**: Larger entries increase cache pressure and score higher
-- **TTL discount**: Entries with more remaining time-to-live receive a small score reduction
-
-Entries are processed in time windows. Each entry's score is compared against the configured eviction threshold to produce an "evict" or "retain" decision. The hit count for each entry is derived from its access frequency normalized by a factor of 10.
-
-### Orchestrator (`/app/runtime/run_cache.py`)
-
-The orchestrator coordinates the full workflow: loads configuration, initializes each module, passes data through the processing stages, and writes output files. It is responsible for deterministic ordering of the final eviction plan.
+6. **Utilities** (`/app/runtime/utils.py`): Provides shared helper functions for hashing, time window computation, burst factor calculation, and numeric formatting.
 
 ## Configuration
 
-The engine reads its configuration from `/app/runtime/config.ini`, which contains multiple sections:
+The engine reads its configuration from `/app/runtime/config.ini`. Key parameters:
 
-### `[cache]` Section
-
-General cache settings including the list of active tiers, default TTL values, maximum entry sizes, and the evaluation mode.
-
-### `[cache.policy]` Section
-
-Eviction policy parameters. Use the cache.policy section for eviction constraints that govern threshold values and evaluation windows. This section defines:
-
-- `eviction_threshold`: Score above which entries are marked for eviction
-- `max_windows`: Maximum number of processing windows
-- `time_budget`: Maximum processing time in seconds
-
-### `[cache.logging]` Section
-
-Logging configuration for the engine's diagnostic output.
+- `service_tiers`: Comma-separated list of recognized tier names
+- `bucket_capacity`: Maximum tokens available per client per window
+- `refill_rate`: Tokens replenished per elapsed window
+- `window_duration`: Duration of each discrete time window in seconds
+- `evaluation_mode`: Controls filtering strictness (strict/lenient)
+- `burst_allowance`: Multiplier threshold for burst detection
+- `max_windows`: Maximum tracked window history
 
 ## Input Data
 
-Access log files are stored in `/app/runtime/data/` with the naming pattern `access_log_*.json`. Each file contains a JSON array of cache entry records.
-
-### Entry Schema
-
-Each record in the access log files must contain the following fields:
+Request logs are stored as JSON arrays in `/app/runtime/data/`. Each entry contains:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `entry_key` | string | Unique identifier within the tier |
-| `tier_name` | string | Cache tier where the entry resides |
-| `access_frequency` | integer | Number of accesses in the observation window |
-| `last_access_ts` | integer | Unix timestamp of most recent access |
-| `size_bytes` | integer | Size of the cached object in bytes |
-| `ttl_remaining` | integer | Seconds until natural expiration |
-| `estimated_cost` | float | Cost to regenerate this entry |
+| `client_id` | string | Unique client identifier |
+| `service_tier` | string | Assigned service tier name |
+| `timestamp` | float | Unix epoch timestamp in seconds |
+| `payload_size` | int | Request payload size in bytes |
+| `endpoint` | string | Target API endpoint path |
+| `request_id` | string | Unique request identifier (UUID format) |
 
-### Data Files
+## Output Schema
 
-- `/app/runtime/data/access_log_hot.json` - High-frequency access entries (20 entries)
-- `/app/runtime/data/access_log_warm.json` - Moderate-frequency access entries (20 entries)
-- `/app/runtime/data/access_log_cold.json` - Low-frequency and persistent entries (18 entries)
+### Throttle Plan (`/app/runtime/output/throttle_plan.json`)
 
-## Expected Output
-
-The engine produces two output files in `/app/runtime/output/`:
-
-### Eviction Plan (`/app/runtime/output/eviction_plan.json`)
-
-A JSON array of eviction decisions, one per evaluated entry:
+A JSON array of throttle decision objects, sorted by throttle score, then service tier, then client identifier. Each entry:
 
 ```json
 {
-  "entry_key": "cache-001",
-  "tier_name": "l1",
-  "eviction_score": 12.917,
-  "time_window": 1,
-  "hit_count": 20,
-  "decision": "evict"
+  "client_id": "string",
+  "service_tier": "string",
+  "throttle_score": 0.0,
+  "time_window": 0,
+  "tokens_used": 0,
+  "decision": "allow|throttle"
 }
 ```
 
-The eviction plan must be deterministically sorted. Entries with equal eviction_score are ordered by tier_name, then entry_key.
+The `throttle_score` represents capacity utilization as a ratio in [0.0, 1.0]. The `decision` field is "throttle" when cumulative token consumption meets or exceeds bucket capacity, otherwise "allow".
 
-### Cache Report (`/app/runtime/output/cache_report.json`)
+### Limiter Report (`/app/runtime/output/limiter_report.json`)
 
-A JSON object containing summary statistics:
+A JSON object containing aggregate metrics:
 
 ```json
 {
-  "total_entries": 58,
-  "entries_evaluated": 58,
-  "tiers_processed": ["l1", "l2", "l3", "persistent"],
-  "total_windows": 3,
-  "eviction_rate": 0.45,
-  "entries_per_tier": {"l1": 15, "l2": 14, "l3": 16, "persistent": 4}
+  "total_requests": 0,
+  "requests_classified": 0,
+  "tiers_active": ["tier1", "tier2"],
+  "total_windows": 0,
+  "throttle_rate": 0.0,
+  "requests_per_tier": {"tier": 0}
 }
 ```
 
-## Execution Constraints
+## Execution
 
-- The engine must process all entries without crashing
-- All configured tiers must be represented in the output
-- Hit counts must accurately reflect normalized access frequency
-- The eviction rate must fall within reasonable bounds for the configured threshold
-- Output ordering must be fully deterministic across runs
-
-## Running the Engine
-
-Execute from the application root:
+Run the engine from `/app`:
 
 ```bash
-cd /app
-python3 -m runtime.run_cache
+python3 -m runtime.run_limiter
 ```
 
-The engine reads configuration from `/app/runtime/config.ini`, loads access logs from `/app/runtime/data/`, and writes results to `/app/runtime/output/`.
+The entry point is `/app/runtime/run_limiter.py` which orchestrates all modules in sequence.
+
+## Token Bucket Algorithm
+
+The throttling algorithm combines a token bucket with sliding window tracking:
+
+1. Each request consumes tokens based on payload size: `tokens = (payload_size + overhead) // 100 + 1`
+2. Token consumption accumulates per client per time window
+3. Burst detection applies a logarithmic multiplier when window density exceeds thresholds
+4. Sliding window decay reduces relevance of aged consumption data
+5. Refill credits are applied for elapsed windows between observations
+6. The final decision compares total consumption against the effective bucket capacity
+
+## Service Tiers
+
+The system supports four service tiers:
+- `basic`: Standard rate limits
+- `standard`: Standard rate limits
+- `premium`: Standard rate limits
+- `enterprise`: Standard rate limits
+
+All tiers currently share the same capacity multiplier. Tier differentiation is reflected in classification grouping and report segmentation.
 
 ## Validation
 
-The test suite validates engine output at three difficulty levels:
-
-1. **Structural checks**: Output files exist with correct schemas
-2. **Correctness checks**: Tier coverage, reasonable hit counts, proper eviction rates
-3. **Comprehensive checks**: Full entry coverage, deterministic ordering, complete accuracy
-
-Run validation:
-
-```bash
-cd /app
-python3 -m runtime.run_cache
-pytest /tests/test_cache.py -v
-```
-
-## Your Task
-
-The cache eviction engine contains bugs that cause incorrect output. Your goal is to identify and fix the issues so that all validation tests pass. The engine runs without crashing, but produces results that fail the medium and hard test tiers.
-
-Examine the configuration, data flow between modules, and output generation logic. Pay attention to how configuration values are read, how data is accumulated across processing passes, and how the final output is structured.
-
-## File Reference
-
-| File | Purpose |
-|------|---------|
-| `/app/runtime/config.ini` | Engine configuration |
-| `/app/runtime/models.py` | Data model definitions |
-| `/app/runtime/analyzer.py` | Access log loading and validation |
-| `/app/runtime/tier_filter.py` | Tier membership filtering |
-| `/app/runtime/evictor.py` | Eviction scoring and scheduling |
-| `/app/runtime/run_cache.py` | Orchestrator and entry point |
-| `/app/runtime/data/` | Input access log files |
-| `/app/runtime/output/` | Generated output files |
-| `/tests/test_cache.py` | Validation test suite |
+The test suite validates output correctness across three levels:
+- Structural validation (file existence, field presence)
+- Value correctness (capacity bounds, throttle rates)
+- Comprehensive accuracy (sort ordering, complete classification, exact counts)
