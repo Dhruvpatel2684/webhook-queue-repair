@@ -2,7 +2,7 @@
   "id": "FEAT-001",
   "type": "feat",
   "description": "Create the complete cache-eviction-repair Harbor Terminal-Bench task with all files, data, tests, and solution. This is a greenfield creation of a debugging task with 4 interacting bugs across config parsing, section references, accumulation logic, and sort ordering in a multi-tier cache eviction engine.",
-  "status": "in_progress",
+  "status": "completed",
   "steps": [
     "Create environment/Dockerfile with: FROM python:3.11-slim, RUN pip install uv, COPY runtime/ /app/runtime/, WORKDIR /app",
     "Create environment/runtime/__init__.py (empty file)",
@@ -46,5 +46,5 @@
     "Count total lines across runtime Python files - should be 400+"
   ],
   "blocked_reason": null,
-  "findings": ""
+  "findings": "All 4 bugs verified working correctly: Bug A excludes 4 persistent entries (54/58 pass filter), Bug B gives 0% eviction rate (threshold=95), Bug C doubles hit_count to max 100 (exceeds test limit of 60), Bug D causes incorrect sort order at score 33.0 between l1 and l3 entries. Easy tests (4) all pass with bugs present. After all fixes applied: 58 entries evaluated, 44.8% eviction rate, max hit_count=50, sort order correct. Changed correct threshold from 75 to 25 to achieve proper eviction rate in [0.3, 0.7] range. 761 lines of runtime code total."
 }
