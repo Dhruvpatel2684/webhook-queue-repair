@@ -1,7 +1,14 @@
 {
   "task_id": "task-scheduler-engine-repair",
   "task_description": "Create a Harbor Terminal-Bench debugging task: a priority-based task scheduling engine with 4 interacting bugs that Sonnet cannot solve but Opus can (2-4/8). Domain: Task Scheduler.",
-  "status": "in_progress",
+  "status": "completed",
   "feature_order": ["FEAT-001"],
-  "blocked_reason": null
+  "blocked_reason": null,
+  "verification": {
+    "build": "pass",
+    "tests": "pass",
+    "test_quality": "pass",
+    "docker_build": "pass",
+    "summary": "Docker builds successfully. Buggy code: 4/10 tests pass (Easy tier), 6/10 fail (Medium + Hard). After repair_scheduler.py: 10/10 pass. All 4 bugs verified: Bug A (config space filters critical jobs), Bug B (wrong section gives max_concurrent=20), Bug C (doubled execution times), Bug D (missing queue_name in sort). 600 lines of Python across runtime modules."
+  }
 }
